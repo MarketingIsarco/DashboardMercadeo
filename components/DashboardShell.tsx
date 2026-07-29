@@ -5,8 +5,8 @@ import { FilterBar } from '@/components/FilterBar';
 import { ensureChartsRegistered } from '@/components/charts/setup';
 import { ComercialTab } from '@/components/tabs/ComercialTab';
 import { ComparativoTab } from '@/components/tabs/ComparativoTab';
+import { GerenciaTab } from '@/components/tabs/GerenciaTab';
 import { MercadeoTab } from '@/components/tabs/MercadeoTab';
-import { PlanTab } from '@/components/tabs/PlanTab';
 import { ResultadosTab } from '@/components/tabs/ResultadosTab';
 import { applyFilters, availableMonths, availableYears, defaultFilters } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
@@ -19,7 +19,7 @@ const TABS = [
   { id: 'mercadeo', label: 'Mercadeo', Component: MercadeoTab },
   { id: 'comercial', label: 'Comercial', Component: ComercialTab },
   { id: 'comp', label: 'Comparativo', Component: ComparativoTab },
-  { id: 'plan', label: 'Plan de Acción', Component: PlanTab },
+  { id: 'gerencia', label: 'Gerencia', Component: GerenciaTab },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];

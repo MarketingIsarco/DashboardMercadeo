@@ -79,6 +79,11 @@ function intern(list: string[], index: Map<string, number>, value: string): numb
   return i;
 }
 
+/** `YYYY-MM-DD HH:MM:SS` | `YYYY-MM-DD` | null → `YYYY-MM-DD` | `''`. */
+function dateOnly(value: string | null | undefined): string {
+  return value ? value.slice(0, 10) : '';
+}
+
 function phoneOf(deal: PipedriveDeal): string {
   const p = deal.person_id;
   if (p && typeof p === 'object' && Array.isArray(p.phone)) return p.phone[0]?.value ?? '';
@@ -155,6 +160,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const isLost = status === STATUS_LOST;
     const lossReason = isLost && reason ? intern(lossReasons, lossReasonIdx, reason) : -1;
 
+    const name = deal.person_name?.trim() || deal.title?.trim() || 'Sin nombre';
+    const phone = phoneOf(deal);
+
     leads.push({
       id: deal.id,
       date,
@@ -170,6 +178,13 @@ export async function loadDashboardData(): Promise<DashboardData> {
       recoverable: isLost && isRecoverable(reason),
       advisor,
       ageDays: ageInDays(deal.add_time, deal.close_time, now),
+      // Un deal recién creado nunca se ha "actualizado": su antigüedad de
+      // gestión se cuenta desde que entró, no desde el epoch.
+      updateTime: dateOnly(deal.update_time) || date,
+      nextActivity: dateOnly(deal.next_activity_date),
+      lastActivity: dateOnly(deal.last_activity_date),
+      name,
+      phone,
     });
 
     // Una separación abierta ya es una venta comprometida, aunque el CRM
@@ -177,7 +192,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     if (stage >= STAGE_SEPARACION || status === STATUS_WON) {
       sales.push({
         id: deal.id,
-        name: deal.person_name || deal.title || 'Sin nombre',
+        name,
         date,
         source: sourceLabel,
         isDigital: DIGITAL_SOURCES.includes(normalize(sourceLabel)),
@@ -187,7 +202,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
         advisor: advisorLabel,
         stage: STAGES[stage] ?? STAGES[0],
         status: status === STATUS_WON ? 'Ganado' : status === STATUS_LOST ? 'Perdido' : 'Abierto',
-        phone: phoneOf(deal),
+        phone,
       });
     }
   }

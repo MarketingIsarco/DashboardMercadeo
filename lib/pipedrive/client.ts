@@ -14,6 +14,12 @@ export interface PipedriveDeal {
   title: string;
   add_time: string;
   close_time: string | null;
+  /** `YYYY-MM-DD HH:MM:SS` — último movimiento del deal. */
+  update_time: string | null;
+  /** `YYYY-MM-DD` de la próxima actividad agendada, o `null`. */
+  next_activity_date: string | null;
+  /** `YYYY-MM-DD` de la última actividad registrada, o `null`. */
+  last_activity_date: string | null;
   status: 'open' | 'won' | 'lost' | 'deleted';
   stage_id: number;
   pipeline_id: number;

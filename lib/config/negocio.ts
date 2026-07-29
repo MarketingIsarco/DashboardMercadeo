@@ -77,6 +77,33 @@ export const STAGE_NEGOCIACION = 4;
 export const STAGE_SEPARACION = 5;
 
 /**
+ * Días máximos que un lead abierto puede pasar sin movimiento antes de contarse
+ * como vencido ("rotting"), por índice de proyecto → índice de etapa.
+ *
+ * ⚠️ No existe en Pipedrive — es una política comercial, se edita a mano.
+ *
+ * La constructora corre a otro ritmo que la inmobiliaria: 2–5 días vs. 7–10.
+ * Tinguazul 1 va en `null` porque está en cierre de inventario y no se audita.
+ * Una etapa sin umbral (p. ej. "Separación" en inmobiliaria) tampoco se audita.
+ */
+export const ROTTEN_DAYS: Record<number, Record<number, number> | null> = {
+  0: { 0: 2, 1: 2, 2: 3, 3: 5, 4: 3, 5: 3 },
+  1: { 0: 2, 1: 2, 2: 3, 3: 5, 4: 3, 5: 3 },
+  2: null,
+  3: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
+  4: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
+  5: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
+  6: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
+  7: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
+};
+
+/** Paleta por índice de `PROJECTS`. */
+export const PROJECT_COLORS = [
+  '#6366f1', '#f59e0b', '#a78bfa', '#22d3ee',
+  '#4ade80', '#c9a96e', '#f43f5e', '#94a3b8',
+];
+
+/**
  * Inversión publicitaria mensual en COP.
  * ⚠️ No existe en Pipedrive — se actualiza a mano cada mes.
  */

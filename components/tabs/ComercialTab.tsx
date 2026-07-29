@@ -17,6 +17,7 @@ import {
   STAGES,
 } from '@/lib/config/negocio';
 import { firstName, pct } from '@/lib/format';
+import { enrichGestion, todayISO } from '@/lib/gestion';
 import {
   computeKpis,
   goalFor,
@@ -136,8 +137,16 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
         </KpiGrid>
       </Section>
 
-      {/* 02 · Gestión Comercial */}
-      <Section title="02 · Gestión Comercial" sub="Actividad y eficiencia del equipo comercial">
+      {/* 02 · Gestión en Tiempo Real */}
+      <Section
+        title="02 · Gestión en Tiempo Real"
+        sub="Estado del pipeline abierto hoy: qué lleva demasiado tiempo quieto y qué no tiene siguiente paso agendado"
+      >
+        <GestionTiempoReal leads={filtered} />
+      </Section>
+
+      {/* 03 · Gestión Comercial */}
+      <Section title="03 · Gestión Comercial" sub="Actividad y eficiencia del equipo comercial">
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Leads por Asesor</h3>
@@ -167,8 +176,8 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
         </div>
       </Section>
 
-      {/* 03 · Antigüedad de Leads */}
-      <Section title="03 · Antigüedad de Leads" sub="Tiempo de los leads abiertos dentro del pipeline">
+      {/* 04 · Antigüedad de Leads */}
+      <Section title="04 · Antigüedad de Leads" sub="Tiempo de los leads abiertos dentro del pipeline">
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Distribución por Antigüedad</h3>
@@ -188,8 +197,8 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
         </div>
       </Section>
 
-      {/* 04 · Negocios Perdidos */}
-      <Section title="04 · Negocios Perdidos" sub="Dónde y por qué se pierden los leads">
+      {/* 05 · Negocios Perdidos */}
+      <Section title="05 · Negocios Perdidos" sub="Dónde y por qué se pierden los leads">
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Pérdida vs Ganados por Asesor</h3>
@@ -217,7 +226,120 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
   );
 }
 
-// ── 02 · Gestión ─────────────────────────────────────────────────────
+// ── 02 · Gestión en tiempo real ──────────────────────────────────────
+
+/**
+ * Dos lecturas del pipeline abierto, deliberadamente separadas:
+ *
+ *  · "Vencidos" mide tiempo transcurrido sin movimiento contra el umbral que
+ *    `ROTTEN_DAYS` le da a cada etapa y proyecto. Es un hecho.
+ *  · "Sin actividad" mide si el asesor dejó agendado un siguiente paso. Es una
+ *    intención.
+ *
+ * Un lead puede fallar en una y pasar la otra, y la acción correctiva difiere,
+ * así que mezclarlas en un solo número escondería cuál de las dos está rota.
+ */
+function GestionTiempoReal({ leads }: { leads: Lead[] }) {
+  const today = useMemo(() => todayISO(), []);
+  const open = useMemo(() => leads.filter(isAbierto), [leads]);
+
+  const rows = useMemo(() => {
+    const enriched = enrichGestion(open, today);
+    return STAGES.map((stage, si) => {
+      const sub = enriched.filter((g) => g.lead.stage === si);
+      const rotten = sub.filter((g) => g.isRotten);
+      const auditados = sub.filter((g) => g.threshold !== null);
+      const sinActividad = sub.filter((g) => g.activity === 'sin-registro');
+      return {
+        stage,
+        total: sub.length,
+        // "En tiempo": tiene umbral y todavía no lo superó. Los que no se
+        // auditan (Tinguazul 1, o etapas sin umbral) van aparte para que la
+        // fila cuadre y no se lean como si estuvieran bien gestionados.
+        enTiempo: auditados.length - rotten.length,
+        sinAuditar: sub.length - auditados.length,
+        rotten: rotten.length,
+        avgOverdue: rotten.length
+          ? (rotten.reduce((s, g) => s + g.overdue, 0) / rotten.length).toFixed(1)
+          : '–',
+        conActividad: sub.length - sinActividad.length,
+        sinActividad: sinActividad.length,
+      };
+    }).filter((r) => r.total > 0);
+  }, [open, today]);
+
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold text-dim">Leads Vencidos por Etapa</h3>
+      <p className="mb-2 text-2xs text-muted">
+        Leads abiertos cuyo tiempo sin movimiento supera el límite de su etapa y proyecto (rotting). Corte al {today}.
+      </p>
+      <DataTable
+        rows={rows}
+        empty="Sin leads abiertos en el filtro actual."
+        columns={[
+          { header: 'Etapa', cell: (r) => <span className="font-semibold">{r.stage}</span> },
+          { header: 'Abiertos', cell: (r) => r.total, align: 'right' },
+          {
+            header: 'En tiempo',
+            align: 'right',
+            cell: (r) => <span className="font-semibold text-[#16a34a]">{r.enTiempo || '–'}</span>,
+          },
+          {
+            header: 'Vencidos',
+            align: 'right',
+            cell: (r) => <span className="font-bold text-red">{r.rotten || '–'}</span>,
+          },
+          {
+            header: '% Vencidos',
+            align: 'right',
+            cell: (r) => (r.rotten ? <span className="font-bold text-red">{pct(r.rotten, r.total)}%</span> : '–'),
+          },
+          { header: 'Prom. días vencido', cell: (r) => r.avgOverdue, align: 'right' },
+          {
+            header: 'Sin auditar',
+            align: 'right',
+            cell: (r) => <span className="text-muted">{r.sinAuditar || '–'}</span>,
+          },
+        ]}
+      />
+
+      <div className="mt-6">
+        <h3 className="mb-2 text-xs font-semibold text-dim">Actividad Pendiente por Etapa</h3>
+        <p className="mb-2 text-2xs text-muted">
+          Leads abiertos · Con actividad = tienen una fecha agendada en Pipedrive · Sin actividad = nadie definió el
+          siguiente paso
+        </p>
+        <DataTable
+          rows={rows}
+          empty="Sin leads abiertos en el filtro actual."
+          columns={[
+            { header: 'Etapa', cell: (r) => <span className="font-semibold">{r.stage}</span> },
+            { header: 'Abiertos', cell: (r) => r.total, align: 'right' },
+            {
+              header: 'Con actividad',
+              align: 'right',
+              cell: (r) => <span className="text-[#16a34a]">{r.conActividad}</span>,
+            },
+            {
+              header: 'Sin actividad',
+              align: 'right',
+              cell: (r) => <span className="font-bold text-red">{r.sinActividad || '–'}</span>,
+            },
+            {
+              header: '% Sin actividad',
+              align: 'right',
+              cell: (r) =>
+                r.sinActividad ? <span className="font-bold text-red">{pct(r.sinActividad, r.total)}%</span> : '–',
+            },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── 03 · Gestión ─────────────────────────────────────────────────────
 
 function LeadsPorAsesor({ leads, advisors }: { leads: Lead[]; advisors: PresentAdvisor[] }) {
   const rows = advisors.map((a) => {

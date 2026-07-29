@@ -47,6 +47,20 @@ export interface Lead {
   advisor: number;
   /** Days between `add_time` and close (or today, if still open). */
   ageDays: number;
+
+  // ── Campos de gestión (Pipedrive: update_time / *_activity_date) ────
+  // Alimentan la pestaña Gerencia y "Gestión en Tiempo Real": sin ellos no se
+  // puede saber si un lead abierto está siendo trabajado o abandonado.
+
+  /** `YYYY-MM-DD` del último movimiento del deal. Cae a `date` si falta. */
+  updateTime: string;
+  /** `YYYY-MM-DD` de la próxima actividad agendada; `''` si no hay ninguna. */
+  nextActivity: string;
+  /** `YYYY-MM-DD` de la última actividad registrada; `''` si no hay ninguna. */
+  lastActivity: string;
+  /** Nombre del contacto, para las tablas de gestión nominal. */
+  name: string;
+  phone: string;
 }
 
 /**

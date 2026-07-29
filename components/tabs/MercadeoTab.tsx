@@ -107,6 +107,13 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
       {/* 04 · Motivos de Pérdida */}
       <Section title="04 · Motivos de Pérdida" sub="Análisis de leads perdidos por grupo y razón individual">
         <LossSection leads={filtered} lossReasons={meta.lossReasons} period={filters.period} />
+        <div className="mt-6">
+          <h3 className="mb-2 text-xs font-semibold text-dim">Pérdidas por Campaña</h3>
+          <p className="mb-2 text-2xs text-muted">
+            Distribución de motivos de pérdida para cada campaña activa
+          </p>
+          <LossByCampaign leads={filtered} campaigns={meta.campaigns} />
+        </div>
       </Section>
 
       {/* 05 · Inversión en Pauta Digital */}
@@ -823,6 +830,70 @@ function LossSection({
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Motivos de pérdida cruzados por campaña.
+ *
+ * Es el puente entre mercadeo y comercial: una campaña que trae volumen pero
+ * cuyas pérdidas se concentran en "Mal segmento" está comprando el público
+ * equivocado, y eso no se ve en el CPL ni en el conteo de leads.
+ *
+ * Incluye la columna "Sin motivo" — que el HTML original omitía — porque una
+ * campaña cuyos perdidos no tienen motivo registrado no está limpia: está sin
+ * diagnosticar, y sumarla a "Otro" haría parecer que sí se sabe qué pasó.
+ */
+function LossByCampaign({ leads, campaigns }: { leads: Lead[]; campaigns: string[] }) {
+  const rows = useMemo(() => {
+    const lost = leads.filter(isPerdido);
+    const byCampaign = new Map<number, { total: number; groups: Map<LossGroup | '', number> }>();
+
+    for (const l of lost) {
+      let entry = byCampaign.get(l.campaign);
+      if (!entry) {
+        entry = { total: 0, groups: new Map() };
+        byCampaign.set(l.campaign, entry);
+      }
+      entry.total += 1;
+      entry.groups.set(l.lossGroup, (entry.groups.get(l.lossGroup) ?? 0) + 1);
+    }
+
+    return [...byCampaign.entries()]
+      .map(([ci, e]) => ({
+        campaign: campaigns[ci] ?? `#${ci}`,
+        total: e.total,
+        counts: [...LOSS_GROUPS.map((g) => e.groups.get(g) ?? 0), e.groups.get('') ?? 0],
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [leads, campaigns]);
+
+  const headers = [...LOSS_GROUPS.map((g) => LOSS_GROUP_LABEL[g]), SIN_MOTIVO];
+  const colors = [...LOSS_GROUPS.map((g) => LOSS_GROUP_COLORS[g]), SIN_MOTIVO_COLOR];
+
+  return (
+    <DataTable
+      rows={rows}
+      maxHeight={360}
+      empty="Sin leads perdidos en el filtro actual."
+      columns={[
+        { header: 'Campaña', cell: (r) => <span className="font-semibold">{r.campaign}</span> },
+        { header: 'Total', cell: (r) => <b>{r.total}</b>, align: 'right' },
+        ...headers.map((h, gi) => ({
+          header: h,
+          align: 'right' as const,
+          cell: (r: (typeof rows)[number]) => {
+            const n = r.counts[gi];
+            if (!n) return <span className="text-muted">–</span>;
+            return (
+              <span style={{ color: colors[gi] }} className="font-semibold">
+                {n} <span className="text-2xs text-muted">{pct(n, r.total)}%</span>
+              </span>
+            );
+          },
+        })),
+      ]}
+    />
   );
 }
 

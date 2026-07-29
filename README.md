@@ -46,8 +46,9 @@ app/api/data           Devuelve el payload del dashboard. ?refresh=1 fuerza reca
 lib/pipedrive/client   Llamadas crudas a Pipedrive (deals, stages, pipelines, campos)
 lib/pipedrive/mapping  Deal de Pipedrive → Lead del dashboard
 lib/pipedrive/cache    Caché en memoria + deduplicación de peticiones concurrentes
-lib/config/negocio.ts  TODO lo que no vive en Pipedrive (inversión, metas, colores)
+lib/config/negocio.ts  TODO lo que no vive en Pipedrive (inversión, metas, rotting, colores)
 lib/selectors.ts       Filtros y métricas derivadas
+lib/gestion.ts         Estado del pipeline abierto: actividad agendada y rotting
 components/tabs/*      Las 5 pestañas
 ```
 
@@ -71,6 +72,10 @@ Lo importante: **el proyecto es el pipeline**, no un campo personalizado.
 | Motivo de pérdida | `lost_reason` |
 | Asesor | `owner_name` |
 | Antigüedad | `add_time` → `close_time` (o hoy) |
+| Último movimiento | `update_time` (cae a `add_time` si falta) |
+| Próxima actividad | `next_activity_date` |
+| Última actividad | `last_activity_date` |
+| Nombre y teléfono | `person_name` / `person_id.phone[0]` |
 
 Las etapas se mapean **por nombre, no por `order_nr`**: los pipelines de
 inmobiliaria tienen una etapa "Segunda Visita" que los de constructora no, así
@@ -88,6 +93,10 @@ Dos cosas viven en `lib/config/negocio.ts` y se actualizan a mano:
   datos de enero a junio de 2026. Los meses sin dato se muestran como `—`, nunca
   como cero.
 - **`META`** — metas mensuales de leads, citas, visitas, cierres y tasa de cierre.
+- **`ROTTEN_DAYS`** — días que un lead abierto puede pasar sin movimiento antes de
+  contarse como vencido, por proyecto y etapa. Es una política comercial: la
+  constructora corre a 2–5 días, la inmobiliaria a 7–10, y Tinguazul 1 no se
+  audita (`null`).
 
 También son configurables ahí los umbrales del embudo, la clasificación de
 motivos de pérdida y la paleta.
@@ -98,12 +107,16 @@ motivos de pérdida y la paleta.
 |---|---|
 | Resultados | KPIs, embudo, análisis de ventas, tendencias, detalle de ventas |
 | Mercadeo | Pipeline, análisis por fuente, motivos de pérdida, inversión en pauta |
-| Comercial | Gestión por asesor, antigüedad de leads, negocios perdidos |
+| Comercial | Gestión en tiempo real, gestión por asesor, antigüedad de leads, negocios perdidos |
 | Comparativo | Mes A vs. mes B, con controles propios |
-| Plan de Acción | Diagnóstico y recomendaciones, con controles propios |
+| Gerencia | Pulso del negocio, alertas de gestión por asesor, velocidad del funnel |
 
-**Comparativo** y **Plan de Acción** usan sus propios controles y **no** responden
-a la barra de filtros global (así era el original). Cada una lo advierte en la UI.
+**Comparativo** usa sus propios controles y **no** responde a la barra de filtros
+global (así era el original); lo advierte en la UI.
+
+**Gerencia** reemplazó a la antigua pestaña "Plan de Acción", cuyo diagnóstico
+estaba escrito a mano y anclado a junio de 2026. Donde aquella narraba el pasado,
+ésta mira el pipeline **abierto**: lo que todavía se puede salvar.
 
 ## Definiciones de negocio
 
@@ -114,6 +127,13 @@ a la barra de filtros global (así era el original). Cada una lo advierte en la 
   volver a tocar la puerta. Lo contrario es una pérdida dura.
 - **Cierres proyectados** = 30 % de los que están en negociación + 70 % de los que
   ya separaron.
+- **Gestión vencida** (Gerencia) = lead abierto cuya próxima actividad agendada
+  quedó en el pasado. Es distinto de **sin registro**: ahí no hay ninguna
+  actividad agendada, y la acción correctiva no es la misma.
+- **Lead vencido / rotting** (Comercial) = lead abierto que lleva más días sin
+  movimiento que los que `ROTTEN_DAYS` permite en su etapa y proyecto. Mide
+  tiempo transcurrido, no intención: un lead puede estar "al día" y aun así
+  llevar nueve días quieto.
 
 ## Nota de calidad de datos
 
