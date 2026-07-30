@@ -30,6 +30,19 @@ export interface PipedriveDeal {
   [customField: string]: unknown;
 }
 
+export interface PipedriveActivity {
+  id: number;
+  /** `null` en actividades sueltas, no atadas a ningún trato. */
+  deal_id: number | null;
+  /** `YYYY-MM-DD HH:MM:SS` — "Hora de añadición": cuándo se registró en el CRM. */
+  add_time: string | null;
+  /** `YYYY-MM-DD HH:MM:SS` — cuándo se marcó como completada, o `null`. */
+  marked_as_done_time: string | null;
+  done: boolean;
+  type: string | null;
+  subject: string | null;
+}
+
 export interface PipedriveStage {
   id: number;
   name: string;
@@ -115,6 +128,38 @@ export async function fetchAllDeals(base: string): Promise<PipedriveDeal[]> {
     // `all_not_deleted` es el valor documentado; deja fuera los deals borrados.
     const json = await request<PipedriveDeal[]>(base, '/deals', {
       status: 'all_not_deleted',
+      limit,
+      start,
+    });
+    if (!Array.isArray(json.data)) break;
+    all.push(...json.data);
+    if (!json.additional_data?.pagination?.more_items_in_collection) break;
+    start += limit;
+  }
+  return all;
+}
+
+/**
+ * Trae todas las actividades paginando de a 500 (~60 requests para ~31k).
+ *
+ * Es el barrido más caro del refresco, pero no hay alternativa: la API no
+ * expone "la primera actividad de cada trato", y pedirlas trato por trato
+ * (`/deals/{id}/activities`) serían ~7.200 requests. Con la caché de 15 min
+ * esto corre 4 veces por hora como máximo.
+ */
+export async function fetchAllActivities(base: string): Promise<PipedriveActivity[]> {
+  const all: PipedriveActivity[] = [];
+  let start = 0;
+  const limit = 500;
+
+  // Misma cota dura que en `fetchAllDeals`, escalada al volumen de actividades.
+  const MAX_PAGES = 400;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    // `user_id: 0` = todos los usuarios de la cuenta. Sin él Pipedrive devuelve
+    // sólo las actividades del dueño del API token, que aquí sería casi nada.
+    const json = await request<PipedriveActivity[]>(base, '/activities', {
+      user_id: 0,
       limit,
       start,
     });

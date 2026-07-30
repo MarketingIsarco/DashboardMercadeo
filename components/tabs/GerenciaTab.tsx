@@ -10,7 +10,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
 import { MONTH_SHORT, PROJECTS, PROJECT_COLORS, STAGES } from '@/lib/config/negocio';
-import { firstName, monthLabel, pct } from '@/lib/format';
+import { firstName, fmtHoras, median, monthLabel, pct } from '@/lib/format';
 import { activityState, daysBetween, todayISO } from '@/lib/gestion';
 import type { ActivityState } from '@/lib/gestion';
 import { isAbierto, isPerdido, isVenta } from '@/lib/selectors';
@@ -98,6 +98,8 @@ export function GerenciaTab({ filtered, meta }: TabProps) {
           </div>
         </div>
       </Section>
+
+      <PrimerContacto leads={filtered} advisors={meta.advisors} />
     </>
   );
 }
@@ -423,6 +425,283 @@ function Velocidad({ leads }: { leads: Lead[] }) {
         }}
       />
     </ChartBox>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 04 · Tiempo de primer contacto
+//
+// Cruce `/deals` × `/activities` por `deal_id`, resuelto en el servidor
+// (`lib/pipedrive/mapping.ts`). Aquí sólo se agrega por asesor.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Mínimo de tratos con dato para publicar la mediana de un asesor. */
+const MIN_MUESTRA = 5;
+
+/**
+ * Tope del eje. Sin él, un asesor con mediana de tres meses aplasta la escala
+ * y los demás quedan como barras de un pixel. Las barras topadas se marcan y
+ * el tooltip siempre muestra el valor real.
+ */
+const EJE_MAX_H = 200;
+
+interface ContactoRow {
+  advisor: string;
+  total: number;
+  conDato: number;
+  sinDato: number;
+  /** `null` cuando la muestra no llega a `MIN_MUESTRA`. */
+  mediana: number | null;
+  promedio: number | null;
+  pctBajo1h: number;
+  pctBajo24h: number;
+}
+
+function semaforoContacto(medianaH: number | null): { color: string; label: string } {
+  if (medianaH === null) return { color: '#94a3b8', label: '⚪ Muestra insuf.' };
+  if (medianaH <= 4) return { color: '#4ade80', label: '🟢 Rápido' };
+  if (medianaH <= 24) return { color: '#f59e0b', label: '🟡 En el día' };
+  return { color: '#ef4444', label: '🔴 Tardío' };
+}
+
+/** Agrega una lista de horas a la forma que consumen la tabla y los gráficos. */
+function resumirHoras(horas: number[], total: number, advisor: string): ContactoRow {
+  const suficiente = horas.length >= MIN_MUESTRA;
+  const share = (limite: number) =>
+    horas.length ? Math.round((horas.filter((h) => h <= limite).length / horas.length) * 100) : 0;
+
+  return {
+    advisor,
+    total,
+    conDato: horas.length,
+    sinDato: total - horas.length,
+    mediana: suficiente ? Number(median(horas).toFixed(2)) : null,
+    promedio: suficiente ? Number((horas.reduce((a, b) => a + b, 0) / horas.length).toFixed(2)) : null,
+    pctBajo1h: share(1),
+    pctBajo24h: share(24),
+  };
+}
+
+function PrimerContacto({ leads, advisors }: { leads: Lead[]; advisors: string[] }) {
+  const { rows, global } = useMemo(() => {
+    const byAdvisor = new Map<number, Lead[]>();
+    for (const l of leads) {
+      const bucket = byAdvisor.get(l.advisor);
+      if (bucket) bucket.push(l);
+      else byAdvisor.set(l.advisor, [l]);
+    }
+
+    const horasDe = (ls: Lead[]) =>
+      ls.map((l) => l.firstContactHours).filter((h): h is number => h !== null);
+
+    const all = [...byAdvisor.entries()].map(([i, ls]) =>
+      resumirHoras(horasDe(ls), ls.length, firstName(advisors[i] ?? `#${i}`)),
+    );
+
+    // Los asesores sin muestra suficiente van al final: ordenarlos por una
+    // mediana que no existe los mezclaría con los rápidos de verdad.
+    const conMuestra = all.filter((r) => r.mediana !== null).sort((a, b) => a.mediana! - b.mediana!);
+    const sinMuestra = all.filter((r) => r.mediana === null).sort((a, b) => b.total - a.total);
+
+    return {
+      rows: [...conMuestra, ...sinMuestra],
+      global: resumirHoras(horasDe(leads), leads.length, 'TOTAL'),
+    };
+  }, [leads, advisors]);
+
+  const grafico = rows.filter((r) => r.mediana !== null);
+
+  return (
+    <Section
+      title="04 · Tiempo de Primer Contacto por Asesor"
+      sub={
+        <>
+          Horas entre la creación del trato y la primera actividad que el asesor registró en él. Cruce de tratos
+          × actividades por ID de trato, directo de Pipedrive ·{' '}
+          <b>
+            {global.conDato.toLocaleString('es-CO')} de {global.total.toLocaleString('es-CO')} tratos
+          </b>{' '}
+          tienen primer contacto registrado
+        </>
+      }
+    >
+      {grafico.length === 0 ? (
+        <p className="mt-3 text-xs text-muted">
+          Ningún asesor alcanza {MIN_MUESTRA} tratos con primer contacto en el filtro actual.
+        </p>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold text-dim">Mediana de primer contacto por asesor</h3>
+            <p className="mb-2 text-2xs text-muted">
+              Sólo asesores con {MIN_MUESTRA} o más tratos con dato · eje topado en {EJE_MAX_H} h
+            </p>
+            <MedianaContacto rows={grafico} />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold text-dim">Distribución de velocidad por asesor</h3>
+            <p className="mb-2 text-2xs text-muted">% de tratos en cada rango de tiempo de respuesta</p>
+            <DistribucionContacto rows={grafico} />
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6">
+        <TablaContacto rows={rows} global={global} />
+      </div>
+    </Section>
+  );
+}
+
+function MedianaContacto({ rows }: { rows: ContactoRow[] }) {
+  const reales = rows.map((r) => r.mediana!);
+
+  return (
+    <ChartBox height={300}>
+      <Bar
+        data={{
+          labels: rows.map((r) => r.advisor),
+          datasets: [
+            {
+              label: 'Mediana',
+              data: reales.map((h) => Math.min(h, EJE_MAX_H)),
+              backgroundColor: reales.map((h) => `${semaforoContacto(h).color}66`),
+              borderColor: reales.map((h) => semaforoContacto(h).color),
+              borderWidth: 2,
+            },
+          ],
+        }}
+        options={{
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (c) => fmtHoras(reales[c.dataIndex]),
+                afterLabel: (c) =>
+                  reales[c.dataIndex] > EJE_MAX_H ? `Barra topada en ${EJE_MAX_H} h` : '',
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              max: EJE_MAX_H,
+              title: { display: true, text: 'Horas al primer contacto', color: TICK_COLOR },
+              grid: { color: GRID_COLOR },
+              ticks: { color: TICK_COLOR },
+            },
+            y: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+          },
+        }}
+      />
+    </ChartBox>
+  );
+}
+
+function DistribucionContacto({ rows }: { rows: ContactoRow[] }) {
+  const bandas = [
+    { label: 'Menos de 1 h', color: '#4ade80', valor: (r: ContactoRow) => r.pctBajo1h },
+    { label: '1 a 24 h', color: '#f59e0b', valor: (r: ContactoRow) => r.pctBajo24h - r.pctBajo1h },
+    { label: 'Más de 24 h', color: '#ef4444', valor: (r: ContactoRow) => 100 - r.pctBajo24h },
+  ];
+
+  return (
+    <ChartBox height={300}>
+      <Bar
+        data={{
+          labels: rows.map((r) => r.advisor),
+          datasets: bandas.map((b) => ({
+            label: b.label,
+            data: rows.map(b.valor),
+            backgroundColor: `${b.color}88`,
+            borderColor: b.color,
+            borderWidth: 1,
+          })),
+        }}
+        options={{
+          // Mismo eje que el gráfico de al lado: los dos leen por asesor, y
+          // en vertical los 11 nombres se solapan.
+          indexAxis: 'y',
+          plugins: {
+            legend: legendBottom,
+            tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw as number}%` } },
+          },
+          scales: {
+            x: {
+              stacked: true,
+              beginAtZero: true,
+              max: 100,
+              grid: { color: GRID_COLOR },
+              ticks: { color: TICK_COLOR, callback: (v) => `${v}%` },
+            },
+            y: { stacked: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+          },
+        }}
+      />
+    </ChartBox>
+  );
+}
+
+function TablaContacto({ rows, global }: { rows: ContactoRow[]; global: ContactoRow }) {
+  const conTotal = [...rows, global];
+  const esTotal = (r: ContactoRow) => r === global;
+  const tiempo = (h: number | null) => (h === null ? '–' : fmtHoras(h));
+
+  return (
+    <DataTable
+      rows={conTotal}
+      empty="Sin tratos en el filtro actual."
+      columns={[
+        {
+          header: 'Asesor',
+          cell: (r) => <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>,
+        },
+        { header: 'Tratos', align: 'right', cell: (r) => r.total.toLocaleString('es-CO') },
+        { header: 'Con 1er contacto', align: 'right', cell: (r) => r.conDato.toLocaleString('es-CO') },
+        {
+          header: 'Sin registro',
+          align: 'right',
+          cell: (r) => <span className="text-muted">{r.sinDato.toLocaleString('es-CO')}</span>,
+        },
+        {
+          header: 'Mediana',
+          align: 'right',
+          cell: (r) => (
+            <b style={{ color: semaforoContacto(r.mediana).color }}>{tiempo(r.mediana)}</b>
+          ),
+        },
+        {
+          header: 'Promedio',
+          align: 'right',
+          cell: (r) => <span className="text-dim">{tiempo(r.promedio)}</span>,
+        },
+        {
+          header: '% < 1h',
+          align: 'right',
+          cell: (r) => (r.conDato >= MIN_MUESTRA ? `${r.pctBajo1h}%` : '–'),
+        },
+        {
+          header: '% < 24h',
+          align: 'right',
+          cell: (r) => (r.conDato >= MIN_MUESTRA ? `${r.pctBajo24h}%` : '–'),
+        },
+        {
+          header: 'Semáforo',
+          cell: (r) => {
+            const s = semaforoContacto(r.mediana);
+            return (
+              <span
+                className="whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold"
+                style={{ background: `${s.color}22`, color: s.color }}
+              >
+                {s.label}
+              </span>
+            );
+          },
+        },
+      ]}
+    />
   );
 }
 

@@ -56,6 +56,28 @@ export function monthShort(month: string): string {
   return MONTH_SHORT[idx] ?? month;
 }
 
+/**
+ * Horas → `'2d 3h 15m'` / `'5h 20m'`.
+ *
+ * Los tiempos de respuesta van de minutos a meses, así que un número plano de
+ * horas ("1683.4") no se lee. Los minutos se conservan porque abajo del día es
+ * donde se juega la métrica.
+ */
+export function fmtHoras(h: number): string {
+  const totalMin = Math.round(h * 60);
+  const dias = Math.floor(totalMin / 1440);
+  const horas = Math.floor((totalMin % 1440) / 60);
+  const min = totalMin % 60;
+  return dias > 0 ? `${dias}d ${horas}h ${min}m` : `${horas}h ${min}m`;
+}
+
+/** Mediana de una lista no vacía. Muta una copia, no el argumento. */
+export function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
 /** Primer nombre — los ejes con 11 asesores no caben con nombre completo. */
 export function firstName(fullName: string): string {
   return fullName.split(' ')[0];

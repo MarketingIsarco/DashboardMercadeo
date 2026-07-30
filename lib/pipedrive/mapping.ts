@@ -23,13 +23,14 @@ import type { ContentType, DashboardData, Lead, LossGroup, Meta, SaleDeal, Statu
 import { normalize } from '@/lib/format';
 import {
   FIELD,
+  fetchAllActivities,
   fetchAllDeals,
   fetchDealFields,
   fetchPipelines,
   fetchStages,
   resolveBase,
 } from './client';
-import type { PipedriveDeal } from './client';
+import type { PipedriveActivity, PipedriveDeal } from './client';
 
 function classifyLossGroup(reason: string): LossGroup | '' {
   if (!reason) return '';
@@ -84,6 +85,57 @@ function dateOnly(value: string | null | undefined): string {
   return value ? value.slice(0, 10) : '';
 }
 
+/**
+ * `YYYY-MM-DD HH:MM:SS` → epoch ms.
+ *
+ * Pipedrive no manda zona horaria. Como ambos lados de cada resta usan esta
+ * misma función, la diferencia sale correcta aunque el instante absoluto quede
+ * desplazado por el offset del servidor.
+ */
+function parseTs(value: string | null | undefined): number {
+  return value ? Date.parse(value.replace(' ', 'T')) : NaN;
+}
+
+/**
+ * `deal_id` → instante de su actividad más antigua.
+ *
+ * Se ordena por `add_time` ("Hora de añadición"), no por
+ * `marked_as_done_time`: lo que se quiere medir es cuándo el asesor dejó
+ * constancia de la gestión, no cuándo cerró la tarea. La diferencia no es
+ * cosmética — sobre el histórico completo mueve la mediana global de ~45 h
+ * a ~24 h, porque muchas llamadas se registran al momento y se marcan como
+ * completadas mucho después.
+ */
+function firstActivityByDeal(activities: PipedriveActivity[]): Map<number, number> {
+  const first = new Map<number, number>();
+
+  for (const a of activities) {
+    if (!a.deal_id) continue;
+    const t = parseTs(a.add_time);
+    if (Number.isNaN(t)) continue;
+
+    const prev = first.get(a.deal_id);
+    if (prev === undefined || t < prev) first.set(a.deal_id, t);
+  }
+  return first;
+}
+
+/** Horas entre la creación del trato y su primera actividad; `null` si no hay. */
+function firstContactHours(deal: PipedriveDeal, firstActivityTs: number | undefined): number | null {
+  if (firstActivityTs === undefined) return null;
+
+  const created = parseTs(deal.add_time);
+  if (Number.isNaN(created)) return null;
+
+  const hours = (firstActivityTs - created) / 3_600_000;
+
+  // Una actividad anterior a la creación del trato no es un tiempo de
+  // respuesta: pasa en migraciones y cargas masivas, donde la actividad viene
+  // con su fecha original y el deal con la de importación. Contarla como 0
+  // premiaría al asesor con una mediana que no ganó.
+  return hours < 0 ? null : Number(hours.toFixed(2));
+}
+
 function phoneOf(deal: PipedriveDeal): string {
   const p = deal.person_id;
   if (p && typeof p === 'object' && Array.isArray(p.phone)) return p.phone[0]?.value ?? '';
@@ -101,12 +153,15 @@ function phoneOf(deal: PipedriveDeal): string {
 export async function loadDashboardData(): Promise<DashboardData> {
   const base = await resolveBase();
 
-  const [deals, stages, pipelines, dealFields] = await Promise.all([
+  const [deals, activities, stages, pipelines, dealFields] = await Promise.all([
     fetchAllDeals(base),
+    fetchAllActivities(base),
     fetchStages(base),
     fetchPipelines(base),
     fetchDealFields(base),
   ]);
+
+  const firstActivity = firstActivityByDeal(activities);
 
   const stageName = new Map(stages.map((s) => [s.id, s.name]));
   const pipelineName = new Map(pipelines.map((p) => [p.id, p.name]));
@@ -185,6 +240,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       lastActivity: dateOnly(deal.last_activity_date),
       name,
       phone,
+      firstContactHours: firstContactHours(deal, firstActivity.get(deal.id)),
     });
 
     // Una separación abierta ya es una venta comprometida, aunque el CRM

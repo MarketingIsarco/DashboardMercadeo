@@ -61,6 +61,15 @@ export interface Lead {
   /** Nombre del contacto, para las tablas de gestión nominal. */
   name: string;
   phone: string;
+
+  /**
+   * Horas entre la creación del trato y la primera actividad registrada en él.
+   * `null` cuando el trato todavía no tiene ninguna.
+   *
+   * Sale de cruzar `/deals` con `/activities` por `deal_id`. Es el único campo
+   * del modelo que no se puede derivar del deal solo.
+   */
+  firstContactHours: number | null;
 }
 
 /**
