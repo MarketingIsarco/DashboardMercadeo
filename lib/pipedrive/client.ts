@@ -38,7 +38,12 @@ export interface PipedriveActivity {
   add_time: string | null;
   /** `YYYY-MM-DD HH:MM:SS` — cuándo se marcó como completada, o `null`. */
   marked_as_done_time: string | null;
+  /** `YYYY-MM-DD` para la que quedó agendada. */
+  due_date: string | null;
+  /** `HH:MM` **en UTC**; `''` o `null` cuando la actividad quedó sin hora. */
+  due_time: string | null;
   done: boolean;
+  /** `key_string` del tipo (`call`, `meeting`, `whatsapp`, …). */
   type: string | null;
   subject: string | null;
 }

@@ -97,6 +97,27 @@ export interface SaleDeal {
 }
 
 /**
+ * Una reunión agendada sobre un trato, reducida a lo que pide el mapa de calor.
+ *
+ * Sale de `/activities` (tipo `meeting`) y se ubica por su **fecha de
+ * vencimiento** — cuándo quedó agendada —, no por cuándo se creó la actividad.
+ * Las reuniones sin trato asociado (comités internos, que son la mayoría del
+ * CRM) no son gestión de pipeline y no llegan hasta aquí.
+ */
+export interface Meeting {
+  /** Coincide con `Lead.id`: es la llave para aplicarle los filtros globales. */
+  dealId: number;
+  /** `YYYY-MM-DD` ya convertido a hora de Bogotá. */
+  date: string;
+  /** `YYYY-MM`, precomputado igual que en `Lead`. */
+  month: string;
+  /** 0 = lunes … 6 = domingo. */
+  weekday: number;
+  /** Hora local 0–23; `null` cuando la actividad se agendó sin hora. */
+  hour: number | null;
+}
+
+/**
  * Label lists resolved from Pipedrive at request time. Indices in `Lead` point
  * into these, so the two must always travel together.
  */
@@ -113,6 +134,8 @@ export interface Meta {
 export interface DashboardData {
   leads: Lead[];
   sales: SaleDeal[];
+  /** Reuniones agendadas sobre tratos del dashboard. */
+  meetings: Meeting[];
   meta: Meta;
   /** ISO timestamp of when this payload was pulled from Pipedrive. */
   fetchedAt: string;

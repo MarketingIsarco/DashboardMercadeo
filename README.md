@@ -109,7 +109,7 @@ motivos de pérdida y la paleta.
 | Mercadeo | Pipeline, análisis por fuente, motivos de pérdida, inversión en pauta |
 | Comercial | Gestión en tiempo real, gestión por asesor, antigüedad de leads, negocios perdidos |
 | Comparativo | Mes A vs. mes B, con controles propios |
-| Gerencia | Pulso del negocio, alertas de gestión por asesor, velocidad del funnel |
+| Gerencia | Pulso del negocio, alertas de gestión por asesor, velocidad del funnel, primer contacto, mapa de calor de reuniones |
 
 **Comparativo** usa sus propios controles y **no** responde a la barra de filtros
 global (así era el original); lo advierte en la UI.
@@ -134,6 +134,13 @@ estaba escrito a mano y anclado a junio de 2026. Donde aquella narraba el pasado
   movimiento que los que `ROTTEN_DAYS` permite en su etapa y proyecto. Mide
   tiempo transcurrido, no intención: un lead puede estar "al día" y aun así
   llevar nueve días quieto.
+- **Reunión** (mapa de calor de Gerencia) = actividad de tipo `meeting`
+  (`MEETING_TYPES`) atada a un trato del dashboard, ubicada por su fecha y hora
+  de vencimiento. Las reuniones sin trato —comités internos, que son la mayoría
+  del CRM— no cuentan. Pipedrive devuelve la hora en UTC y el mapa la muestra en
+  hora de Bogotá (`CRM_UTC_OFFSET_HOURS`); sin esa corrección el pico de las
+  3 p. m. se leería a las 8 p. m. Los filtros de tiempo se aplican a la fecha de
+  la reunión, no a la de creación del lead.
 
 ## Nota de calidad de datos
 

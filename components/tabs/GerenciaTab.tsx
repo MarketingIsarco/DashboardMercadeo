@@ -13,9 +13,9 @@ import { MONTH_SHORT, PROJECTS, PROJECT_COLORS, STAGES } from '@/lib/config/nego
 import { firstName, fmtHoras, median, monthLabel, pct } from '@/lib/format';
 import { activityState, daysBetween, todayISO } from '@/lib/gestion';
 import type { ActivityState } from '@/lib/gestion';
-import { isAbierto, isPerdido, isVenta } from '@/lib/selectors';
-import type { TabProps } from '@/lib/selectors';
-import type { Lead } from '@/lib/types';
+import { applyFilters, isAbierto, isPerdido, isVenta } from '@/lib/selectors';
+import type { FilterState, TabProps } from '@/lib/selectors';
+import type { DashboardData, Lead, Meeting, Meta } from '@/lib/types';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -41,11 +41,12 @@ function lastMonths(today: string, n: number): string[] {
   return out;
 }
 
-export function GerenciaTab({ filtered, meta }: TabProps) {
+export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
   // `today` se congela por render: si se recalculara dentro de cada tabla, dos
   // filas podrían quedar comparadas contra días distintos al cruzar medianoche.
   const today = useMemo(() => todayISO(), []);
   const open = useMemo(() => filtered.filter(isAbierto), [filtered]);
+  const meetings = useMemo(() => filtrarReuniones(data, filters, meta), [data, filters, meta]);
 
   return (
     <>
@@ -100,6 +101,19 @@ export function GerenciaTab({ filtered, meta }: TabProps) {
       </Section>
 
       <PrimerContacto leads={filtered} advisors={meta.advisors} />
+
+      <Section
+        title="05 · Mapa de Calor — Reuniones por Horario"
+        sub={
+          <>
+            Reuniones, citas y visitas agendadas por día de la semana y hora ({HORA_INICIO} a {HORA_FIN} h), según la
+            fecha de vencimiento de la actividad · hora de Bogotá ·{' '}
+            <b>{meetings.length.toLocaleString('es-CO')} reuniones</b> en el filtro actual
+          </>
+        }
+      >
+        <MapaCalorReuniones meetings={meetings} />
+      </Section>
     </>
   );
 }
@@ -702,6 +716,177 @@ function TablaContacto({ rows, global }: { rows: ContactoRow[]; global: Contacto
         },
       ]}
     />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 05 · Mapa de calor de reuniones
+//
+// Cuándo se llena la agenda comercial: día de la semana × hora. Las reuniones
+// vienen de `/activities` (tipo `meeting`) atadas a un trato, ya convertidas a
+// hora de Bogotá en `lib/pipedrive/mapping.ts`.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Franja horaria que se despliega en columnas. Todo lo demás cae en "Sin hora". */
+const HORA_INICIO = 8;
+const HORA_FIN = 18;
+
+const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+/**
+ * Reuniones que caen dentro del filtro actual.
+ *
+ * Los filtros de tiempo se aplican a la fecha de la **reunión**, no a la del
+ * lead: "julio" aquí significa lo que se agendó en julio, aunque el lead haya
+ * entrado en marzo — de otro modo el mapa mostraría la agenda de una cohorte y
+ * no la de un mes. Los demás filtros (proyecto, unidad, fuente, campaña,
+ * estado) sí son propiedades del trato, y se resuelven cruzando por `dealId`.
+ */
+function filtrarReuniones(data: DashboardData, filters: FilterState, meta: Meta): Meeting[] {
+  const sinTiempo: FilterState = {
+    ...filters,
+    months: [],
+    exMonths: [],
+    year: null,
+    dateFrom: null,
+    dateTo: null,
+  };
+  const ids = new Set(applyFilters(data.leads, sinTiempo, meta.digitalSources).map((l) => l.id));
+
+  const monthSet = filters.months.length ? new Set(filters.months) : null;
+  const exMonthSet = filters.exMonths.length ? new Set(filters.exMonths) : null;
+
+  return data.meetings.filter((m) => {
+    if (!ids.has(m.dealId)) return false;
+    if (filters.year !== null && m.date.slice(0, 4) !== filters.year) return false;
+    if (monthSet && !monthSet.has(m.month)) return false;
+    if (exMonthSet && exMonthSet.has(m.month)) return false;
+    if (filters.dateFrom && m.date < filters.dateFrom) return false;
+    if (filters.dateTo && m.date > filters.dateTo) return false;
+    return true;
+  });
+}
+
+/**
+ * Rojo (poca actividad) → amarillo → verde (mucha), aclarado un 45 % hacia
+ * blanco para que el número siga siendo legible encima. Es la misma escala del
+ * dashboard original, así que las celdas se leen igual que en el HTML.
+ */
+function heatColor(v: number, max: number): string {
+  const t = v / max;
+  const mix = (c: number) => Math.round(c + (255 - c) * 0.45);
+
+  if (t <= 0.5) {
+    const k = t / 0.5;
+    return `rgb(${mix(210)},${mix(Math.round(80 + k * 130))},${mix(80)})`;
+  }
+  const k = (t - 0.5) / 0.5;
+  return `rgb(${mix(Math.round(210 - k * 130))},${mix(Math.round(210 - k * 40))},${mix(Math.round(80 + k * 20))})`;
+}
+
+interface Heat {
+  /** `grid[día][columna]`; la última columna es "Sin hora". */
+  grid: number[][];
+  rowTotals: number[];
+  colTotals: number[];
+  total: number;
+  max: number;
+}
+
+function agregar(meetings: Meeting[]): Heat {
+  // Una columna por hora de la franja, más la de "Sin hora" al final.
+  const ncols = HORA_FIN - HORA_INICIO + 2;
+  const sinHora = ncols - 1;
+  const grid = Array.from({ length: 7 }, () => new Array<number>(ncols).fill(0));
+
+  for (const m of meetings) {
+    const col = m.hour !== null && m.hour >= HORA_INICIO && m.hour <= HORA_FIN ? m.hour - HORA_INICIO : sinHora;
+    grid[m.weekday][col] += 1;
+  }
+
+  const rowTotals = grid.map((row) => row.reduce((s, v) => s + v, 0));
+  const colTotals = Array.from({ length: ncols }, (_, c) => grid.reduce((s, row) => s + row[c], 0));
+
+  return {
+    grid,
+    rowTotals,
+    colTotals,
+    total: rowTotals.reduce((s, v) => s + v, 0),
+    // El máximo tiñe la celda más cargada de verde; `1` evita dividir por cero.
+    max: Math.max(1, ...grid.flat()),
+  };
+}
+
+function MapaCalorReuniones({ meetings }: { meetings: Meeting[] }) {
+  const heat = useMemo(() => agregar(meetings), [meetings]);
+
+  if (heat.total === 0) {
+    return <p className="mt-3 text-xs text-muted">Sin reuniones agendadas en el filtro actual.</p>;
+  }
+
+  const horas = Array.from({ length: HORA_FIN - HORA_INICIO + 1 }, (_, i) => `${HORA_INICIO + i}:00`);
+  const columnas = [...horas, 'Sin hora'];
+  const sinHora = columnas.length - 1;
+
+  const th = 'border border-border bg-[#f8f9fc] px-1.5 py-1 text-center text-2xs font-bold text-dim whitespace-nowrap';
+  const totalCell = 'border border-border bg-bg px-1.5 py-1 text-center text-xs font-extrabold';
+  const dashed = { borderLeft: '2px dashed #e2e5ef' };
+
+  return (
+    // Siete filas fijas: nunca hay scroll vertical. El horizontal sí aparece en
+    // pantallas angostas, y por eso la columna de días queda fija.
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full min-w-max border-collapse">
+        <thead>
+          <tr>
+            <th className={`${th} sticky left-0 z-10`}>Día / Hora</th>
+            {columnas.map((c, i) => (
+              <th key={c} className={`${th} ${i === sinHora ? 'text-muted' : ''}`} style={i === sinHora ? dashed : undefined}>
+                {c}
+              </th>
+            ))}
+            <th className={th}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {DIAS.map((dia, d) => (
+            <tr key={dia}>
+              <th className={`${th} sticky left-0 z-10 ${d >= 5 ? 'bg-accent-soft' : ''}`}>{dia}</th>
+              {heat.grid[d].map((v, c) => (
+                <td
+                  key={c}
+                  className={`border border-border px-1.5 py-1 text-center text-xs ${
+                    v ? 'font-semibold text-text' : 'text-muted'
+                  } ${c === sinHora ? 'opacity-75' : ''}`}
+                  style={{
+                    ...(c === sinHora ? dashed : {}),
+                    background: v ? heatColor(v, heat.max) : undefined,
+                  }}
+                >
+                  {v || ''}
+                </td>
+              ))}
+              <td className={totalCell}>{heat.rowTotals[d] || ''}</td>
+            </tr>
+          ))}
+          <tr>
+            <th className={`${th} sticky left-0 z-10 border-t-2 border-t-accent`}>Total</th>
+            {heat.colTotals.map((v, c) => (
+              <td
+                key={c}
+                className={`${totalCell} border-t-2 border-t-accent ${c === sinHora ? 'text-muted' : ''}`}
+                style={c === sinHora ? dashed : undefined}
+              >
+                {v || ''}
+              </td>
+            ))}
+            <td className="border-2 border-accent bg-accent px-1.5 py-1 text-center text-xs font-black text-white">
+              {heat.total}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 

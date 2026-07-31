@@ -2,8 +2,10 @@ import 'server-only';
 
 import {
   CONSTRUCTORA_IDX,
+  CRM_UTC_OFFSET_HOURS,
   DIGITAL_SOURCES,
   LOSS_GROUP_RULES,
+  MEETING_TYPES,
   PIPELINE_TO_PROJECT,
   PROJECTS,
   RECOVERABLE_RULES,
@@ -19,7 +21,16 @@ import {
   STATUS_OPEN,
   STATUS_WON,
 } from '@/lib/types';
-import type { ContentType, DashboardData, Lead, LossGroup, Meta, SaleDeal, Status } from '@/lib/types';
+import type {
+  ContentType,
+  DashboardData,
+  Lead,
+  LossGroup,
+  Meeting,
+  Meta,
+  SaleDeal,
+  Status,
+} from '@/lib/types';
 import { normalize } from '@/lib/format';
 import {
   FIELD,
@@ -134,6 +145,62 @@ function firstContactHours(deal: PipedriveDeal, firstActivityTs: number | undefi
   // con su fecha original y el deal con la de importación. Contarla como 0
   // premiaría al asesor con una mediana que no ganó.
   return hours < 0 ? null : Number(hours.toFixed(2));
+}
+
+const MEETING_TYPE_SET = new Set(MEETING_TYPES);
+
+/**
+ * `due_date` + `due_time` (UTC) → día y hora locales.
+ *
+ * La conversión puede correr la fecha —y con ella el día de la semana— cuando
+ * la reunión cae de madrugada en UTC: las 02:00 UTC del martes son las 21:00
+ * del lunes en Bogotá, y contarla como martes movería el bloque de agenda de
+ * día. Sin hora no hay nada que convertir: la fecha se toma tal cual.
+ */
+function toLocal(dueDate: string, dueTime: string | null | undefined): { date: string; hour: number | null } {
+  if (!dueTime) return { date: dueDate, hour: null };
+
+  const [y, mo, d] = dueDate.split('-').map(Number);
+  const [hh, mm] = dueTime.split(':').map(Number);
+  const ts = Date.UTC(y, mo - 1, d, hh, mm) + CRM_UTC_OFFSET_HOURS * 3_600_000;
+  if (Number.isNaN(ts)) return { date: dueDate, hour: null };
+
+  const local = new Date(ts);
+  return { date: local.toISOString().slice(0, 10), hour: local.getUTCHours() };
+}
+
+/** 0 = lunes … 6 = domingo, a partir de `YYYY-MM-DD`. */
+function weekdayOf(iso: string): number {
+  const [y, mo, d] = iso.split('-').map(Number);
+  // Mediodía UTC: inmune a que el runtime del servidor esté en otra zona.
+  return (new Date(Date.UTC(y, mo - 1, d, 12)).getUTCDay() + 6) % 7;
+}
+
+/**
+ * Reuniones agendadas sobre tratos que el dashboard sí mapea.
+ *
+ * `dealIds` deja fuera las de pipelines no mapeados y las de tratos borrados:
+ * sin trato en el modelo no se les puede aplicar ningún filtro, y aparecerían
+ * en el mapa de calor sin importar lo que el usuario tenga seleccionado.
+ */
+function buildMeetings(activities: PipedriveActivity[], dealIds: Set<number>): Meeting[] {
+  const out: Meeting[] = [];
+
+  for (const a of activities) {
+    if (!a.deal_id || !a.due_date) continue;
+    if (!MEETING_TYPE_SET.has(a.type ?? '')) continue;
+    if (!dealIds.has(a.deal_id)) continue;
+
+    const { date, hour } = toLocal(a.due_date, a.due_time);
+    out.push({
+      dealId: a.deal_id,
+      date,
+      month: date.slice(0, 7),
+      weekday: weekdayOf(date),
+      hour,
+    });
+  }
+  return out;
 }
 
 function phoneOf(deal: PipedriveDeal): string {
@@ -279,6 +346,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   return {
     leads,
     sales,
+    meetings: buildMeetings(activities, new Set(leads.map((l) => l.id))),
     meta,
     fetchedAt: new Date().toISOString(),
     total: leads.length,

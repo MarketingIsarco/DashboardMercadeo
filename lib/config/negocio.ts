@@ -97,6 +97,26 @@ export const ROTTEN_DAYS: Record<number, Record<number, number> | null> = {
   7: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
 };
 
+/**
+ * Tipos de actividad que cuentan como reunión agendada con el cliente.
+ *
+ * Son los `key_string` de `/activityTypes`. Hoy la cuenta tiene un solo tipo
+ * para esto (`meeting` = "Reunión"), y bajo él se agendan reuniones, citas y
+ * visitas; el resto (`call`, `whatsapp`, `email`, `task`) es gestión de
+ * contacto, no un bloque de agenda.
+ */
+export const MEETING_TYPES = ['meeting'];
+
+/**
+ * Desfase entre la hora que devuelve Pipedrive (UTC) y la hora de Bogotá.
+ *
+ * Sólo importa donde la **hora del día** es el dato — el mapa de calor de
+ * reuniones. Sin corregirlo, la agenda comercial aparece cinco horas corrida y
+ * el pico de las 3 p. m. se lee a las 8 p. m. Colombia no aplica horario de
+ * verano, así que el desfase es constante todo el año.
+ */
+export const CRM_UTC_OFFSET_HOURS = -5;
+
 /** Paleta por índice de `PROJECTS`. */
 export const PROJECT_COLORS = [
   '#6366f1', '#f59e0b', '#a78bfa', '#22d3ee',
