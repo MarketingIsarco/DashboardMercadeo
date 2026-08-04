@@ -47,6 +47,7 @@ lib/pipedrive/client   Llamadas crudas a Pipedrive (deals, stages, pipelines, ca
 lib/pipedrive/mapping  Deal de Pipedrive → Lead del dashboard
 lib/pipedrive/cache    Caché en memoria + deduplicación de peticiones concurrentes
 lib/config/negocio.ts  TODO lo que no vive en Pipedrive (inversión, metas, rotting, colores)
+lib/inversion.ts       Derivaciones sobre el presupuesto: bolsas y meses activos, Digital/No-Digital
 lib/selectors.ts       Filtros y métricas derivadas
 lib/gestion.ts         Estado del pipeline abierto: actividad agendada y rotting
 components/tabs/*      Las 5 pestañas
@@ -89,9 +90,20 @@ hardcodeado.
 
 Dos cosas viven en `lib/config/negocio.ts` y se actualizan a mano:
 
-- **`INVERSION`** — pauta publicitaria mensual por proyecto, en COP. Hoy sólo hay
-  datos de enero a junio de 2026. Los meses sin dato se muestran como `—`, nunca
-  como cero.
+- **`INVERSION_RUBROS`** — el presupuesto de Mercadeo del P&G, en COP, como matriz
+  `bolsa × rubro × mes`. Hay tres bolsas (`inari`, `tng`, `inm`), 16 rubros y datos
+  de enero a julio de 2026. Los meses sin dato se muestran como `—`, nunca como cero.
+
+  Cada rubro de `RUBROS` lleva su bandera `digital` — la clasificación que definió
+  Mercadeo — y la(s) fuente(s) del CRM a las que se atribuye. **Los totales Digital
+  y No-Digital no se guardan: se derivan** sumando los rubros según esa bandera
+  (`lib/inversion.ts`). Guardar el total y el desglose por separado fue el error del
+  prototipo HTML; dos números que dicen lo mismo terminan discrepando.
+
+  De ahí sale la regla que gobierna el capítulo 05: **el CPL divide sólo la
+  inversión digital**; los costos por cita, visita y cierre van contra el total.
+  Meterle vallas y merchandising al denominador de un costo por lead de Instagram
+  infla la métrica con plata que nunca compró un lead digital.
 - **`META`** — metas mensuales de leads, citas, visitas, cierres y tasa de cierre.
 - **`ROTTEN_DAYS`** — días que un lead abierto puede pasar sin movimiento antes de
   contarse como vencido, por proyecto y etapa. Es una política comercial: la
@@ -106,7 +118,7 @@ motivos de pérdida y la paleta.
 | Pestaña | Alcance |
 |---|---|
 | Resultados | KPIs, embudo, análisis de ventas, tendencias, detalle de ventas |
-| Mercadeo | Pipeline, análisis por fuente, motivos de pérdida, inversión en pauta |
+| Mercadeo | Pipeline, análisis por fuente, motivos de pérdida, inversión en mercadeo (Digital vs No-Digital + desglose por rubro) |
 | Comercial | Gestión en tiempo real, gestión por asesor, antigüedad de leads, negocios perdidos |
 | Comparativo | Mes A vs. mes B, con controles propios |
 | Gerencia | Pulso del negocio, alertas de gestión por asesor, velocidad del funnel, primer contacto, mapa de calor de reuniones |

@@ -6,12 +6,12 @@ import { Section } from '@/components/ui/Section';
 import { Segmented } from '@/components/ui/Segmented';
 import {
   CONSTRUCTORA_IDX,
-  INVERSION,
   META,
   META_ADS_SOURCES,
   PAID_SOURCES,
 } from '@/lib/config/negocio';
 import { firstName, fmtCOP, monthLabel, sourceIndices } from '@/lib/format';
+import { bolsasDeProyecto, totalesMes } from '@/lib/inversion';
 import {
   countBy,
   isCita,
@@ -149,20 +149,14 @@ function computeMetrics(
   const digL = base.filter((l) => paidSet.has(l.source)).length; // pauta pagada IG+FB+WA
   const metaL = base.filter((l) => metaAdsSet.has(l.source)).length; // Meta Ads IG+FB
 
-  // Inversión: sólo existe 2026-01..2026-06. Sin dato → null (no cero, no inventado).
-  let inv = 0;
-  let hasInv = false;
-  const invInari = INVERSION.inari[month];
-  const invTng = INVERSION.tng[month];
-  if (projIdx !== 1 && invInari != null) {
-    inv += invInari;
-    hasInv = true;
-  }
-  if (projIdx !== 0 && invTng != null) {
-    inv += invTng;
-    hasInv = true;
-  }
-  const invVal = hasInv ? inv : null;
+  // Inversión del mes para las bolsas del proyecto comparado. Sin presupuesto
+  // cargado → null (no cero, no inventado).
+  // El CPL divide la parte **digital** y los costos por cita/visita/cierre el
+  // total, igual que el capítulo 05 de Mercadeo: si divergieran, el mismo mes
+  // reportaría dos CPL distintos según la pestaña.
+  const invMes = totalesMes(bolsasDeProyecto(projIdx), month);
+  const invVal = invMes.total > 0 ? invMes.total : null;
+  const invDig = invMes.digital > 0 ? invMes.digital : null;
 
   const lrG: Record<string, number> = {};
   for (const l of lost) {
@@ -200,8 +194,8 @@ function computeMetrics(
     pVN: visitas ? (negoTotal / visitas) * 100 : 0,
     pNC: negoTotal ? (seps / negoTotal) * 100 : 0,
     pLG: (gan / total) * 100,
-    cpl: digL && invVal ? Math.round(invVal / digL) : null,
-    cplMeta: metaL && invVal ? Math.round(invVal / metaL) : null,
+    cpl: digL && invDig ? Math.round(invDig / digL) : null,
+    cplMeta: metaL && invDig ? Math.round(invDig / metaL) : null,
     cplCita: citas && invVal ? Math.round(invVal / citas) : null,
     costoVis: visitas && invVal ? Math.round(invVal / visitas) : null,
     costoCierre: gan && invVal ? Math.round(invVal / gan) : null,
@@ -650,10 +644,10 @@ export function ComparativoTab({ data, meta }: TabProps) {
         </div>
       </Section>
 
-      <Section title="04 · Inversión en Pauta Digital">
+      <Section title="04 · Inversión en Mercadeo">
         <SubBlock
           title="Eficiencia de Inversión"
-          sub="Costo por lead, cita, visita y cierre según inversión en pauta"
+          sub="CPL sobre la inversión digital · costo por cita, visita y cierre sobre la inversión total"
         >
           <Table2
             labelA={labelA}

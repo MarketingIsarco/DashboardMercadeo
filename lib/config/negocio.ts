@@ -124,33 +124,140 @@ export const PROJECT_COLORS = [
 ];
 
 /**
- * Inversión publicitaria mensual en COP.
- * ⚠️ No existe en Pipedrive — se actualiza a mano cada mes.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * INVERSIÓN EN MERCADEO
+ *
+ * ⚠️ No existe en Pipedrive — sale del P&G de Mercadeo y se actualiza a mano.
+ *
+ * La fuente de verdad es la matriz `INVERSION_RUBROS` (rubro × mes × bolsa).
+ * Los totales de Digital / No-Digital NO se guardan: se derivan sumando los
+ * rubros según su bandera `digital`. Guardarlos duplicados fue el error del
+ * prototipo HTML — dos números que dicen lo mismo terminan discrepando.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
-export const INVERSION: Record<'inari' | 'tng', Record<string, number>> = {
-  inari: {
-    '2026-01': 2_488_798,
-    '2026-02': 3_047_728,
-    '2026-03': 3_870_616,
-    '2026-04': 2_925_567,
-    '2026-05': 4_820_740,
-    '2026-06': 6_133_384,
-  },
-  tng: {
-    '2026-01': 2_282_981,
-    '2026-02': 3_625_416,
-    '2026-03': 2_172_036,
-    '2026-04': 2_994_432,
-    '2026-05': 2_681_870,
-    '2026-06': 3_477_936,
-  },
-};
 
-/** Índice de `PROJECTS` que consume cada bolsa de inversión. */
-export const INVERSION_PROJECT: Record<'inari' | 'tng', number[]> = {
+/** Bolsa presupuestal. Cada una cubre uno o varios proyectos. */
+export type Bolsa = 'inari' | 'tng' | 'inm';
+
+/** Índices de `PROJECTS` que consume cada bolsa. */
+export const BOLSA_PROJECTS: Record<Bolsa, number[]> = {
   inari: [0],
   tng: [1, 2],
+  inm: INMOBILIARIA_IDX,
 };
+
+export const BOLSA_LABEL: Record<Bolsa, string> = {
+  inari: 'Inari 101',
+  tng: 'Tinguazul',
+  inm: 'Inmobiliaria',
+};
+
+/** Meses con presupuesto cargado, en orden cronológico. */
+export const INVERSION_MESES = [
+  '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07',
+];
+
+export interface Rubro {
+  label: string;
+  /**
+   * Clasificación digital / no-digital definida por Mercadeo. Es la que parte
+   * el gasto en las dos bolsas del capítulo 05 y la que alimenta el CPL:
+   * el CPL digital sólo puede dividir la inversión **digital**.
+   */
+  digital: boolean;
+  /**
+   * Fuente(s) del CRM a las que Mercadeo atribuye el rubro. No se usa para
+   * calcular — queda documentada y visible en el desglose para que la
+   * clasificación sea auditable frente al P&G.
+   */
+  fuentes: string[];
+}
+
+/** 16 conceptos del P&G. El orden fija los índices de `INVERSION_RUBROS`. */
+export const RUBROS: Rubro[] = [
+  { label: 'Publicidad Digital', digital: true, fuentes: ['Facebook', 'Instagram', 'LinkedIn', 'Redes Sociales'] },
+  { label: 'Portales Inmobiliarios', digital: true, fuentes: ['Finca Raiz', 'Proppit'] },
+  { label: 'Campañas CRM-WhatsApp', digital: true, fuentes: ['Whatsapp'] },
+  { label: 'Banderas', digital: false, fuentes: ['Sala de Negocios'] },
+  { label: 'Valla', digital: false, fuentes: ['Valla'] },
+  { label: 'Volantes y otros', digital: false, fuentes: ['Volante'] },
+  { label: 'Brochures - Ayuda de ventas', digital: false, fuentes: ['Sala de Negocios'] },
+  { label: 'Eventos / Ruedas de negocio', digital: false, fuentes: ['Activaciones de marca'] },
+  { label: 'Desarrollo Chat IA', digital: true, fuentes: ['Whatsapp'] },
+  { label: 'Página Web', digital: true, fuentes: ['Página Web'] },
+  { label: 'Tour Virtuales', digital: true, fuentes: ['Página Web'] },
+  { label: '1 Módulo con equipos', digital: false, fuentes: ['Activaciones de marca'] },
+  { label: 'Obsequio para clientes', digital: false, fuentes: ['Sala de Negocios'] },
+  { label: 'Activaciones / Ferias', digital: false, fuentes: ['Activaciones de marca'] },
+  { label: 'Relaciones públicas / PR', digital: false, fuentes: ['Referidos'] },
+  { label: 'Merchandising', digital: false, fuentes: ['Sala de Negocios'] },
+];
+
+/**
+ * Inversión en COP: `[bolsa][índice de RUBROS][índice de INVERSION_MESES]`.
+ * Las filas van en el mismo orden que `RUBROS` y las columnas que `INVERSION_MESES`.
+ */
+export const INVERSION_RUBROS: Record<Bolsa, number[][]> = {
+  inari: [
+    /*  0 Publicidad Digital */ [3_000_000, 2_800_000, 200_000, 5_600_000, 3_400_000, 5_500_000, 4_415_348],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [0, 85_132, 84_306, 283_615, 0, 0, 76_464],
+    /*  3 Banderas           */ [0, 3_478_370, 606_900, 0, 0, 0, 606_900],
+    /*  4 Valla              */ [0, 0, 890_477, 0, 306_425, 0, 4_998_000],
+    /*  5 Volantes           */ [0, 1_391_110, 119_000, 142_800, 1_582_700, 0, 756_840],
+    /*  6 Brochures          */ [0, 0, 440_300, 0, 0, 0, 0],
+    /*  7 Eventos            */ [0, 0, 1_326_255, 0, 0, 0, 684_250],
+    /*  8 Chat IA            */ [1_900_947, 1_565_253, 1_530_537, 1_494_080, 1_081_909, 902_524, 2_000_000],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 61_600],
+    /* 10 Tour Virtuales     */ [9_508_100, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [272_462, 971_778, 993_849, 0, 2_204_910, 1_000_500, 0],
+    /* 14 PR                 */ [73_800, 0, 0, 0, 300_000, 1_785_000, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+  ],
+  tng: [
+    /*  0 Publicidad Digital */ [3_000_000, 3_000_000, 3_000_000, 2_987_520, 2_512_480, 3_642_000, 4_000_000],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [48_239, 67_947, 77_237, 236_054, 0, 0, 94_501],
+    /*  3 Banderas           */ [0, 0, 0, 1_213_800, 0, 0, 1_213_800],
+    /*  4 Valla              */ [0, 676_872, 0, 0, 0, 0, 0],
+    /*  5 Volantes           */ [0, 198_730, 404_600, 353_351, 2_084_788, 557_289, 351_050],
+    /*  6 Brochures          */ [0, 202_300, 0, 440_300, 0, 0, 0],
+    /*  7 Eventos            */ [0, 1_140_568, 1_198_092, 0, 2_014_200, 0, 684_250],
+    /*  8 Chat IA            */ [989_687, 937_981, 1_033_922, 890_121, 1_264_266, 813_284, 2_000_000],
+    /*  9 Página Web         */ [0, 0, 3_427_388, 3_374_388, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [272_462, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [0, 0, 0, 0, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+  ],
+  // Agregado de Coworking + Depósitos + Op. Terceros + Locales + Oficinas.
+  inm: [
+    /*  0 Publicidad Digital */ [870_622, 892_360, 0, 1_015_977, 0, 293_757, 619_947],
+    /*  1 Portales           */ [110_000, 1_332_445, 1_010_470, 0, 1_345_940, 123_495, 0],
+    /*  2 CRM-WhatsApp       */ [7_590, 5_125, 5_070, 0, 0, 14_735, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 250_000, 1_704_000, 651_750, 1_116_000, 0],
+    /*  5 Volantes           */ [0, 244_986, 870_000, 0, 0, 163_324, 0],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [60_000, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 1_117_545, 295_470, 527_890, 281_690, 402_040, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 1_200_000, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [754_625, 754_625, 377_310, 377_310, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+  ],
+};
+
+/** Colores de la partición digital / no-digital. Se usan en chart y tabla. */
+export const DIGITAL_COLOR = '#60a5fa';
+export const NO_DIGITAL_COLOR = '#fb923c';
 
 export interface Goal {
   leads: number;

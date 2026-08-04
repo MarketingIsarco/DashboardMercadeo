@@ -10,20 +10,32 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
 import {
-  CONSTRUCTORA_IDX,
-  INVERSION,
+  BOLSA_LABEL,
+  DIGITAL_COLOR,
+  INVERSION_MESES,
   LOSS_GROUPS,
   LOSS_GROUP_COLORS,
   LOSS_GROUP_LABEL,
   META_ADS_SOURCES,
+  NO_DIGITAL_COLOR,
   PAID_SOURCES,
+  RUBROS,
   SIN_MOTIVO,
   SIN_MOTIVO_COLOR,
   SOURCE_COLORS,
   SOURCE_FALLBACK,
   STAGES,
 } from '@/lib/config/negocio';
+import type { Bolsa } from '@/lib/config/negocio';
 import { fmtCOP, monthLabel, pct, sourceIndices } from '@/lib/format';
+import {
+  bolsasActivas,
+  matrizRubros,
+  mesesActivos,
+  proyectosDeBolsas,
+  totales,
+  totalesMes,
+} from '@/lib/inversion';
 import {
   applyFilters,
   availableMonths,
@@ -116,9 +128,12 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         </div>
       </Section>
 
-      {/* 05 · Inversión en Pauta Digital */}
-      <Section title="05 · Inversión en Pauta Digital" sub="Gasto real Meta Ads · Constructora únicamente">
-        <Inversion data={data} filtered={filtered} filters={filters} meta={meta} />
+      {/* 05 · Inversión en Mercadeo */}
+      <Section
+        title="05 · Inversión en Mercadeo"
+        sub="Presupuesto P&G clasificado en Digital / No-Digital · según los filtros activos"
+      >
+        <Inversion filtered={filtered} filters={filters} meta={meta} />
       </Section>
     </>
   );
@@ -898,97 +913,90 @@ function LossByCampaign({ leads, campaigns }: { leads: Lead[]; campaigns: string
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 05 · Inversión en Pauta Digital
+// 05 · Inversión en Mercadeo
+//
+// El presupuesto del P&G viene partido en 16 rubros, cada uno marcado como
+// digital o no-digital (ver `RUBROS` en config/negocio). De ahí sale todo:
+//   · el gasto total y su partición Digital / No-Digital
+//   · el CPL, que divide SÓLO la inversión digital — meterle vallas y
+//     merchandising al denominador de un costo por lead de Instagram infla la
+//     métrica con plata que nunca compró un lead digital
+//   · los costos por visita y por cierre, que sí van contra el total, porque
+//     una visita a sala la produce el conjunto de la mezcla
 // ─────────────────────────────────────────────────────────────────────
-function Inversion({
-  data,
-  filtered,
-  filters,
-  meta,
-}: {
-  data: TabProps['data'];
-  filtered: Lead[];
-  filters: FilterState;
-  meta: Meta;
-}) {
-  // ¿Qué bolsas de inversión aplican según los filtros de proyecto/unidad?
-  const { useInari, useTng } = useMemo(() => {
-    if (filters.unidad === 'inmobiliaria') return { useInari: false, useTng: false };
-    if (filters.projects.length) {
-      const cons = filters.projects.filter((i) => CONSTRUCTORA_IDX.includes(i));
-      if (!cons.length) return { useInari: false, useTng: false };
-      return { useInari: cons.includes(0), useTng: cons.includes(1) || cons.includes(2) };
-    }
-    return { useInari: true, useTng: true };
-  }, [filters.unidad, filters.projects]);
-
-  const months = useMemo(() => Object.keys(INVERSION.inari).sort(), []);
+function Inversion({ filtered, filters, meta }: { filtered: Lead[]; filters: FilterState; meta: Meta }) {
+  const bolsas = useMemo(() => bolsasActivas(filters), [filters]);
+  const months = useMemo(() => mesesActivos(filters), [filters]);
   const metaIdx = useMemo(() => sourceIdxSet(meta.sources, META_ADS_SOURCES), [meta.sources]);
   const paidIdx = useMemo(() => sourceIdxSet(meta.sources, PAID_SOURCES), [meta.sources]);
 
   // ── KPIs ────────────────────────────────────────────────────────────
   const kv = useMemo(() => {
-    const fMonths = new Set(filtered.map((l) => l.month));
-    const activeM = months.filter((m) => fMonths.has(m));
-    let totalInv = 0;
-    for (const m of activeM) {
-      if (useInari) totalInv += INVERSION.inari[m] ?? 0;
-      if (useTng) totalInv += INVERSION.tng[m] ?? 0;
-    }
-    const fc = filtered.filter((l) => CONSTRUCTORA_IDX.includes(l.project));
-    const leadsMeta = fc.filter((l) => metaIdx.has(l.source)).length;
-    const leadsDig = fc.filter((l) => paidIdx.has(l.source)).length;
-    const citas = fc.filter(isCita).length;
-    const visitas = fc.filter(isVisita).length;
-    const cierres = fc.filter(isGanado).length;
+    const inv = totales(bolsas, months);
+
+    // Los leads del denominador tienen que venir de los mismos proyectos que
+    // pagó esa plata y de los mismos meses. Si no, se divide el presupuesto de
+    // 7 meses de Inari entre 12 meses de leads de toda la compañía.
+    const proyectos = new Set(proyectosDeBolsas(bolsas));
+    const mesesSet = new Set(months);
+    const base = filtered.filter((l) => proyectos.has(l.project) && mesesSet.has(l.month));
+
+    const leadsMeta = base.filter((l) => metaIdx.has(l.source)).length;
+    const leadsDig = base.filter((l) => paidIdx.has(l.source)).length;
+    const citas = base.filter(isCita).length;
+    const visitas = base.filter(isVisita).length;
+    const cierres = base.filter(isGanado).length;
+
+    const ratio = (num: number, den: number) => (num && den ? Math.round(num / den) : null);
+
     return {
-      totalInv,
-      activeMonths: activeM.length,
-      cplMeta: leadsMeta ? Math.round(totalInv / leadsMeta) : null,
-      cplDig: leadsDig ? Math.round(totalInv / leadsDig) : null,
-      cplCita: citas ? Math.round(totalInv / citas) : null,
-      costoVis: visitas ? Math.round(totalInv / visitas) : null,
-      costoCierre: cierres ? Math.round(totalInv / cierres) : null,
+      ...inv,
+      activeMonths: months.length,
+      pctDig: inv.total ? Math.round((inv.digital / inv.total) * 100) : 0,
+      cplMeta: ratio(inv.digital, leadsMeta),
+      cplDig: ratio(inv.digital, leadsDig),
+      cplCita: ratio(inv.total, citas),
+      costoVis: ratio(inv.total, visitas),
+      costoCierre: ratio(inv.total, cierres),
     };
-  }, [filtered, months, useInari, useTng, metaIdx, paidIdx]);
+  }, [bolsas, months, filtered, metaIdx, paidIdx]);
 
   const money = (v: number | null) => (v == null ? '–' : fmtCOP(v));
+  const millions = (v: number) => `$${(v / 1e6).toFixed(2)}M`;
 
-  // ── Chart mensual: barras apiladas de inversión + línea de CPL ──────
-  // Ojo: el CPL por mes usa `data.leads` completo (RAW), SIN el filtro de fecha.
-  // El HTML lo hacía así a propósito: la inversión de un mes se divide entre
-  // TODOS los leads pagados de ese mes, no sólo los que quedan tras filtrar fechas.
+  // ── Chart mensual: Digital / No-Digital apilados + línea de CPL ─────
+  // Ojo: el CPL mensual usa `filtered` sin restringir a los meses activos —
+  // cada mes se divide entre sus propios leads, que es justo lo que el filtro
+  // de mes ya deja pasar.
   const chart = useMemo(() => {
-    const labels = months.map((m) => monthLabel(m));
-    const invIna = months.map((m) => (useInari ? (INVERSION.inari[m] ?? 0) : 0) / 1e6);
-    const invTng = months.map((m) => (useTng ? (INVERSION.tng[m] ?? 0) : 0) / 1e6);
+    const proyectos = new Set(proyectosDeBolsas(bolsas));
+    const base = filtered.filter((l) => proyectos.has(l.project));
 
-    const rawCons = data.leads.filter((l) => CONSTRUCTORA_IDX.includes(l.project));
-    const cplM: (number | null)[] = months.map((m) => {
-      let proj = rawCons;
-      if (useInari && !useTng) proj = rawCons.filter((l) => l.project === 0);
-      else if (!useInari && useTng) proj = rawCons.filter((l) => l.project === 1 || l.project === 2);
-      const ld = proj.filter((l) => l.month === m && paidIdx.has(l.source)).length;
-      let inv = 0;
-      if (useInari) inv += INVERSION.inari[m] ?? 0;
-      if (useTng) inv += INVERSION.tng[m] ?? 0;
-      return ld && inv ? Math.round(inv / ld) : null;
-    });
-    return { labels, invIna, invTng, cplM };
-  }, [months, useInari, useTng, data.leads, paidIdx]);
+    return {
+      labels: months.map((m) => monthLabel(m)),
+      dig: months.map((m) => totalesMes(bolsas, m).digital / 1e6),
+      noDig: months.map((m) => totalesMes(bolsas, m).noDigital / 1e6),
+      // null en los meses sin leads o sin inversión: `spanGaps` los salta en vez
+      // de dibujar un cero que se leería como "el lead salió gratis".
+      cpl: months.map((m) => {
+        const ld = base.filter((l) => l.month === m && paidIdx.has(l.source)).length;
+        const dig = totalesMes(bolsas, m).digital;
+        return ld && dig ? Math.round(dig / ld) : null;
+      }),
+    };
+  }, [bolsas, months, filtered, paidIdx]);
 
   const invData: MixedData = {
     labels: chart.labels,
     datasets: [
-      { type: 'bar' as const, label: 'Inari 101', data: chart.invIna, backgroundColor: 'rgba(212,175,55,0.75)', stack: 'inv', yAxisID: 'y', order: 2 },
-      { type: 'bar' as const, label: 'Tinguazul', data: chart.invTng, backgroundColor: 'rgba(20,184,166,0.65)', stack: 'inv', yAxisID: 'y', order: 2 },
+      { type: 'bar' as const, label: 'Digital', data: chart.dig, backgroundColor: `${DIGITAL_COLOR}cc`, stack: 'inv', yAxisID: 'y', order: 2 },
+      { type: 'bar' as const, label: 'No-Digital', data: chart.noDig, backgroundColor: `${NO_DIGITAL_COLOR}b3`, stack: 'inv', yAxisID: 'y', order: 2 },
       {
         type: 'line' as const,
         label: 'CPL Digital',
-        // nulls para meses sin leads/inversión → el `spanGaps` los salta sin inventar.
-        data: chart.cplM as unknown as number[],
-        borderColor: '#f87171',
-        backgroundColor: 'rgba(248,113,113,0.15)',
+        data: chart.cpl as unknown as number[],
+        borderColor: '#f43f5e',
+        backgroundColor: 'rgba(244,63,94,0.12)',
         yAxisID: 'y2',
         tension: 0.3,
         pointRadius: 5,
@@ -1005,7 +1013,7 @@ function Inversion({
         callbacks: {
           label: (ctx) => {
             const raw = (ctx.raw as number) ?? 0;
-            if (ctx.dataset.yAxisID === 'y2') return ` CPL: ${fmtCOP(raw)}`;
+            if (ctx.dataset.yAxisID === 'y2') return ` CPL Digital: ${fmtCOP(raw)}`;
             return ` ${ctx.dataset.label}: $${raw.toFixed(2)}M`;
           },
         },
@@ -1026,33 +1034,201 @@ function Inversion({
         position: 'right',
         beginAtZero: true,
         grid: { display: false },
-        ticks: { color: '#f87171' },
-        title: { display: true, text: 'CPL ($)', color: '#f87171', font: { size: 10 } },
+        ticks: { color: '#f43f5e' },
+        title: { display: true, text: 'CPL Digital ($)', color: '#f43f5e', font: { size: 10 } },
       },
     },
   };
 
+  if (!months.length) {
+    return (
+      <p className="text-xs text-muted">
+        Los filtros de fecha activos no tocan ningún mes con presupuesto cargado ({INVERSION_MESES[0]} a{' '}
+        {INVERSION_MESES[INVERSION_MESES.length - 1]}).
+      </p>
+    );
+  }
+
+  if (!bolsas.length) {
+    return (
+      <p className="text-xs text-muted">
+        Los proyectos seleccionados no tienen bolsa de inversión asignada en el P&G.
+      </p>
+    );
+  }
+
   return (
     <div>
+      {/* `size="sm"`: son ocho cifras en pesos, y a 28px los CPL de siete
+          dígitos se salían de la tarjeta. */}
       <KpiGrid>
-        <Kpi label="Inversión Total" value={kv.totalInv > 0 ? money(kv.totalInv) : '–'} meta={`${kv.activeMonths} mes(es) activos`} />
-        <Kpi label="CPL Meta (IG+FB)" value={money(kv.cplMeta)} meta="por lead Instagram o Facebook" />
-        <Kpi label="CPL Digital" value={money(kv.cplDig)} meta="incluyendo WhatsApp" />
-        <Kpi label="Costo / Cita" value={money(kv.cplCita)} meta="inversión ÷ citas agendadas" />
-        <Kpi label="Costo / Visita" value={money(kv.costoVis)} meta="inversión ÷ visitas realizadas" />
-        <Kpi label="Costo / Cierre" value={money(kv.costoCierre)} meta="inversión ÷ negocios ganados" />
+        <Kpi
+          size="sm"
+          label="Inversión Total"
+          value={kv.total > 0 ? millions(kv.total) : '–'}
+          meta={`${kv.activeMonths} mes(es) · ${bolsas.map((b) => BOLSA_LABEL[b]).join(' + ')}`}
+        />
+        <Kpi
+          size="sm"
+          label="Digital"
+          value={kv.total > 0 ? <span style={{ color: DIGITAL_COLOR }}>{millions(kv.digital)}</span> : '–'}
+          meta={`${kv.pctDig}% del total`}
+        />
+        <Kpi
+          size="sm"
+          label="No-Digital"
+          value={kv.total > 0 ? <span style={{ color: NO_DIGITAL_COLOR }}>{millions(kv.noDigital)}</span> : '–'}
+          meta={`${100 - kv.pctDig}% del total`}
+        />
+        <Kpi size="sm" label="CPL Meta (IG+FB)" value={money(kv.cplMeta)} meta="inv. digital ÷ leads Instagram/Facebook" />
+        <Kpi size="sm" label="CPL Digital" value={money(kv.cplDig)} meta="inv. digital ÷ leads IG+FB+WhatsApp" />
+        <Kpi size="sm" label="Costo / Cita" value={money(kv.cplCita)} meta="inv. total ÷ citas agendadas" />
+        <Kpi size="sm" label="Costo / Visita" value={money(kv.costoVis)} meta="inv. total ÷ visitas realizadas" />
+        <Kpi size="sm" label="Costo / Cierre" value={money(kv.costoCierre)} meta="inv. total ÷ negocios ganados" />
       </KpiGrid>
 
       <div className="mt-5">
-        <h3 className="mb-2 text-xs font-semibold text-dim">Inversión mensual vs CPL digital</h3>
+        <h3 className="mb-2 text-xs font-semibold text-dim">Inversión mensual: Digital vs No-Digital</h3>
         <ChartBox height={320}>
           <MixedChart data={invData} options={invOptions} />
         </ChartBox>
         <p className="mt-2 text-2xs text-muted">
-          Gasto real por proyecto · CPL = inversión / leads Insta+FB+WA. Sólo hay datos de inversión entre 2026-01 y
-          2026-06; los meses sin dato quedan vacíos.
+          El CPL sólo divide la inversión digital, no el total: la valla y el merchandising no compran leads de pauta.
+          Los meses sin leads pagados quedan sin punto en la línea.
         </p>
       </div>
+
+      <div className="mt-6">
+        <h3 className="mb-2 text-xs font-semibold text-dim">Desglose por rubro</h3>
+        <p className="mb-1 text-2xs text-muted">
+          Gasto mensual por concepto del P&G · <span style={{ color: DIGITAL_COLOR }}>■ Digital</span>{' '}
+          <span style={{ color: NO_DIGITAL_COLOR }}>■ No-Digital</span>. Los rubros sin gasto en el periodo se ocultan.
+        </p>
+        <RubrosTable bolsas={bolsas} months={months} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Desglose rubro × mes.
+ *
+ * Va en tabla plana y no en `DataTable` porque el pie —Digital, No-Digital,
+ * TOTAL y % Digital— es la mitad del valor: es donde se lee si la mezcla se
+ * está corriendo hacia lo digital mes a mes.
+ */
+function RubrosTable({ bolsas, months }: { bolsas: Bolsa[]; months: string[] }) {
+  const t = useMemo(() => {
+    const matrix = matrizRubros(bolsas, months);
+    const rowTot = matrix.map((row) => row.reduce((a, b) => a + b, 0));
+    const colTot = months.map((_, ci) => matrix.reduce((a, row) => a + row[ci], 0));
+    const colDig = months.map((_, ci) =>
+      matrix.reduce((a, row, ri) => a + (RUBROS[ri].digital ? row[ci] : 0), 0),
+    );
+    const grand = colTot.reduce((a, b) => a + b, 0);
+    const digTot = colDig.reduce((a, b) => a + b, 0);
+    return {
+      matrix,
+      rowTot,
+      colTot,
+      colDig,
+      colNoDig: colTot.map((v, ci) => v - colDig[ci]),
+      grand,
+      digTot,
+      noDigTot: grand - digTot,
+    };
+  }, [bolsas, months]);
+
+  // Miles con separador local: en pesos, la cifra completa por celda no cabe en
+  // 7 columnas y el peso exacto no es la decisión que se toma aquí.
+  const k = (v: number) =>
+    v ? `$${Math.round(v / 1000).toLocaleString('es-CO')}k` : <span className="text-muted">–</span>;
+
+  const visibles = RUBROS.map((r, ri) => ({ r, ri })).filter(({ ri }) => t.rowTot[ri] > 0);
+
+  if (!visibles.length) {
+    return <p className="text-xs text-muted">Sin gasto registrado en el periodo seleccionado.</p>;
+  }
+
+  const footRow = (label: string, cells: number[], total: number, color?: string) => (
+    <tr>
+      <td className="font-semibold" style={{ color }}>
+        {color ? '● ' : ''}
+        {label}
+      </td>
+      <td />
+      {cells.map((v, ci) => (
+        <td key={months[ci]} className="text-right font-semibold" style={{ color }}>
+          {k(v)}
+        </td>
+      ))}
+      <td className="text-right font-bold" style={{ color }}>
+        {k(total)}
+      </td>
+    </tr>
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="dt">
+        <thead>
+          <tr>
+            <th style={{ minWidth: 180 }}>Rubro</th>
+            <th>Fuente CRM</th>
+            {months.map((m) => (
+              <th key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                {monthLabel(m)}
+              </th>
+            ))}
+            <th style={{ textAlign: 'right' }}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visibles.map(({ r, ri }) => {
+            const color = r.digital ? DIGITAL_COLOR : NO_DIGITAL_COLOR;
+            return (
+              <tr key={r.label} style={{ background: `${color}10` }}>
+                <td>
+                  <span style={{ color }}>●</span> {r.label}
+                </td>
+                <td className="text-2xs text-muted">{r.fuentes.join(', ')}</td>
+                {t.matrix[ri].map((v, ci) => (
+                  <td key={months[ci]} className="text-right">
+                    {k(v)}
+                  </td>
+                ))}
+                <td className="text-right font-semibold">{k(t.rowTot[ri])}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          {footRow('Digital', t.colDig, t.digTot, DIGITAL_COLOR)}
+          {footRow('No-Digital', t.colNoDig, t.noDigTot, NO_DIGITAL_COLOR)}
+          <tr className="border-t-2 border-accent">
+            <td className="font-bold">TOTAL</td>
+            <td />
+            {t.colTot.map((v, ci) => (
+              <td key={months[ci]} className="text-right font-bold">
+                {k(v)}
+              </td>
+            ))}
+            <td className="text-right font-bold">{k(t.grand)}</td>
+          </tr>
+          <tr>
+            <td className="text-muted">% Digital</td>
+            <td />
+            {t.colTot.map((v, ci) => (
+              <td key={months[ci]} className="text-right text-muted">
+                {v ? Math.round((t.colDig[ci] / v) * 100) : 0}%
+              </td>
+            ))}
+            <td className="text-right text-muted">
+              {t.grand ? Math.round((t.digTot / t.grand) * 100) : 0}%
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
