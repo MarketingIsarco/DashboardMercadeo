@@ -1,6 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import logoIsarco from '@/public/isarco-logo.png';
 import { FilterBar } from '@/components/FilterBar';
 import { ensureChartsRegistered } from '@/components/charts/setup';
 import { ComercialTab } from '@/components/tabs/ComercialTab';
@@ -73,6 +75,16 @@ export function DashboardShell() {
   return (
     <>
       <header className="sticky top-0 z-40 flex items-center gap-4 border-b border-border border-t-[3px] border-t-accent bg-accent-tint px-6 py-4 backdrop-blur">
+        <Image
+          src={logoIsarco}
+          alt="ISARCO"
+          priority
+          className="h-9 w-auto shrink-0"
+          sizes="120px"
+        />
+
+        <span aria-hidden className="h-9 w-px shrink-0 bg-border" />
+
         <div className="flex-1">
           <h1 className="text-xl font-bold text-text">Dashboard Comercial</h1>
           <p className="mt-0.5 text-xs text-dim">
@@ -111,10 +123,6 @@ export function DashboardShell() {
         >
           Salir
         </button>
-
-        <span className="whitespace-nowrap rounded-full border border-gold/70 bg-gold/10 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-gold">
-          ISARCO
-        </span>
       </header>
 
       <nav className="flex gap-1 border-b border-border bg-card px-6">
