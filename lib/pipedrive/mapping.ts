@@ -203,6 +203,27 @@ function buildMeetings(activities: PipedriveActivity[], dealIds: Set<number>): M
   return out;
 }
 
+/**
+ * Ids de etiqueta de un trato, unificando las dos formas en que Pipedrive los
+ * manda (`label_ids` y `label`).
+ *
+ * Se unen en vez de elegir una: las cuentas que migraron a etiquetas múltiples
+ * siguen respondiendo el campo viejo, y no hay garantía de que ambos coincidan.
+ */
+function labelIdsOf(deal: PipedriveDeal): string[] {
+  const out: string[] = [];
+
+  const push = (raw: unknown) => {
+    const id = String(raw ?? '').trim();
+    if (id && !out.includes(id)) out.push(id);
+  };
+
+  if (Array.isArray(deal.label_ids)) deal.label_ids.forEach(push);
+  if (deal.label != null && deal.label !== '') String(deal.label).split(',').forEach(push);
+
+  return out;
+}
+
 function phoneOf(deal: PipedriveDeal): string {
   const p = deal.person_id;
   if (p && typeof p === 'object' && Array.isArray(p.phone)) return p.phone[0]?.value ?? '';
@@ -239,8 +260,17 @@ export async function loadDashboardData(): Promise<DashboardData> {
     (fuenteField?.options ?? []).map((o) => [String(o.id), o.label]),
   );
 
+  // "Trato - Etiqueta" es un enum nativo: el deal guarda ids de opción, y las
+  // etiquetas (nombre y color) viven en la definición del campo.
+  const etiquetaField = dealFields.find((f) => f.key === FIELD.ETIQUETA);
+  const etiquetaNames = new Map<string, string>(
+    (etiquetaField?.options ?? []).map((o) => [String(o.id), o.label]),
+  );
+
   const sources: string[] = [];
   const sourceIdx = new Map<string, number>();
+  const labels: string[] = [];
+  const labelIdx = new Map<string, number>();
   const campaigns: string[] = [];
   const campaignIdx = new Map<string, number>();
   const advisors: string[] = [];
@@ -275,6 +305,20 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const advisorLabel = deal.owner_name?.trim() || 'Sin asignar';
     const advisor = intern(advisors, advisorIdx, advisorLabel);
 
+    // Un trato sin etiqueta apunta a "Sin etiqueta" en vez de quedar con la
+    // lista vacía: así el filtro puede aislarlos, que es justo la pregunta
+    // interesante ("¿qué leads nadie clasificó?").
+    const etiquetaIds = labelIdsOf(deal);
+    const leadLabels = etiquetaIds.length
+      ? [
+          ...new Set(
+            etiquetaIds.map((id) =>
+              intern(labels, labelIdx, etiquetaNames.get(id) ?? `Etiqueta ${id}`),
+            ),
+          ),
+        ]
+      : [intern(labels, labelIdx, 'Sin etiqueta')];
+
     const rawContenido = deal[FIELD.CONTENIDO];
     const content = classifyContent(typeof rawContenido === 'string' ? rawContenido : '');
 
@@ -295,6 +339,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       lossReason,
       source,
       campaign,
+      labels: leadLabels,
       content,
       project,
       recoverable: isLost && isRecoverable(reason),
@@ -337,6 +382,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const meta: Meta = {
     sources,
     campaigns,
+    labels,
     projects: [...PROJECTS],
     advisors,
     lossReasons,

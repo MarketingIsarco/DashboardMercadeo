@@ -38,6 +38,13 @@ export interface Lead {
   source: number;
   /** Index into the runtime-derived campaign list. */
   campaign: number;
+  /**
+   * Índices en la lista de etiquetas ("Trato - Etiqueta" de Pipedrive).
+   *
+   * Es un arreglo porque Pipedrive admite varias etiquetas por trato. Nunca
+   * está vacío: un trato sin etiquetar apunta a "Sin etiqueta".
+   */
+  labels: number[];
   content: ContentType;
   /** Index into `PROJECTS` — derived from `pipeline_id`. */
   project: number;
@@ -124,6 +131,8 @@ export interface Meeting {
 export interface Meta {
   sources: string[];
   campaigns: string[];
+  /** Etiquetas de trato descubiertas en la carga, más "Sin etiqueta". */
+  labels: string[];
   projects: string[];
   advisors: string[];
   lossReasons: string[];

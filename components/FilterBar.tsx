@@ -133,6 +133,16 @@ export function FilterBar({
           </div>
         </Field>
 
+        <Field label="Etiqueta">
+          <OptionFilter
+            label="Etiqueta"
+            options={meta.labels.map((label, value) => ({ value, label }))}
+            include={filters.labels}
+            onChange={({ include }) => set({ labels: include })}
+            width={300}
+          />
+        </Field>
+
         <div className="ml-auto">
           <Field label="Agrupar por">
             <Segmented
