@@ -37,6 +37,18 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 > detrás de `/api/data`, que a su vez exige sesión. Por eso el dashboard no podía
 > seguir siendo un HTML suelto.
 
+## Flujo de trabajo para editar el dashboard
+
+- Todo cambio se hace en la rama **`desarrollo`**; a **`main`** solo llega por
+  Pull Request, que revisa y hace merge **Diego**.
+- El repositorio incluye un skill de Claude (`.claude/skills/editar-dashboard/`)
+  con el flujo completo para editar sin saber programar: al clonar o hacer
+  `git pull`, Claude lo aplica automáticamente cuando se pide una modificación.
+- Un hook (`.claude/hooks/proteger-main.sh`) bloquea desde Claude los push y
+  commits directos a `main` y las operaciones destructivas (`--force`,
+  `reset --hard`, merge del PR).
+- Reglas siempre activas para Claude: ver `CLAUDE.md`.
+
 ## Arquitectura
 
 ```
