@@ -9,6 +9,7 @@ import {
   PIPELINE_TO_PROJECT,
   PROJECTS,
   RECOVERABLE_RULES,
+  SIN_ETIQUETA,
   STAGES,
   STAGE_SEPARACION,
   STAGE_TO_IDX,
@@ -317,7 +318,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
             ),
           ),
         ]
-      : [intern(labels, labelIdx, 'Sin etiqueta')];
+      : [intern(labels, labelIdx, SIN_ETIQUETA)];
 
     const rawContenido = deal[FIELD.CONTENIDO];
     const content = classifyContent(typeof rawContenido === 'string' ? rawContenido : '');
