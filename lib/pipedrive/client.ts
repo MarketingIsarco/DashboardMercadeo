@@ -51,6 +51,16 @@ export interface PipedriveActivity {
   id: number;
   /** `null` en actividades sueltas, no atadas a ningún trato. */
   deal_id: number | null;
+  /**
+   * Usuario **al que está asignada** la actividad: el asesor que la tiene que
+   * hacer, y el criterio por el que Pipedrive filtra en sus propios reportes.
+   *
+   * No confundir con `created_by_user_id`, que es quien la creó. En una cuenta
+   * con automatizaciones ese segundo es el usuario del robot, no el asesor.
+   */
+  user_id: number | null;
+  /** Quien creó la actividad. Sin uso hoy; queda declarado para auditorías. */
+  created_by_user_id?: number | null;
   /** `YYYY-MM-DD HH:MM:SS` — "Hora de añadición": cuándo se registró en el CRM. */
   add_time: string | null;
   /** `YYYY-MM-DD HH:MM:SS` — cuándo se marcó como completada, o `null`. */
@@ -170,7 +180,10 @@ export async function fetchAllDeals(base: string): Promise<PipedriveDeal[]> {
  * esto corre 4 veces por hora como máximo.
  */
 export async function fetchAllActivities(base: string): Promise<PipedriveActivity[]> {
-  const all: PipedriveActivity[] = [];
+  // Se deduplica por id: el barrido dura ~60 requests y si alguien crea o
+  // borra una actividad a mitad de la paginación, Pipedrive puede devolver la
+  // misma fila en dos páginas. Sin esto, esa actividad se contaría dos veces.
+  const porId = new Map<number, PipedriveActivity>();
   let start = 0;
   const limit = 500;
 
@@ -186,11 +199,25 @@ export async function fetchAllActivities(base: string): Promise<PipedriveActivit
       start,
     });
     if (!Array.isArray(json.data)) break;
-    all.push(...json.data);
+    for (const a of json.data) porId.set(a.id, a);
     if (!json.additional_data?.pagination?.more_items_in_collection) break;
     start += limit;
   }
-  return all;
+  return [...porId.values()];
+}
+
+export interface PipedriveUser {
+  id: number;
+  name: string | null;
+}
+
+/**
+ * Los usuarios de la cuenta, para poder ponerle nombre al `user_id` de cada
+ * actividad. Es una sola request: la cuenta tiene decenas de usuarios, no miles.
+ */
+export async function fetchUsers(base: string): Promise<PipedriveUser[]> {
+  const json = await request<PipedriveUser[]>(base, '/users');
+  return json.data ?? [];
 }
 
 export async function fetchStages(base: string): Promise<PipedriveStage[]> {

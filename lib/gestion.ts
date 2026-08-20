@@ -118,30 +118,25 @@ export interface AccionesPorAsesor {
  *
  * `leads` son los que ya pasaron los filtros: las actividades de un trato que
  * quedó fuera del filtro se ignoran, y las de tratos que no existen en el
- * dashboard (pipelines no mapeados, tratos borrados) tampoco entran, porque no
- * hay asesor a quien atribuirlas.
- *
- * El asesor de una acción es el **dueño del trato**, no quien creó la
- * actividad: es la misma definición de "asesor" que usa el resto del dashboard,
- * y evita que un apoyo administrativo que registra llamadas ajenas aparezca
- * como el más productivo del equipo.
+ * dashboard (pipelines no mapeados, tratos borrados) tampoco entran. El trato
+ * sólo decide **si la actividad entra**; a quién se le acredita ya viene
+ * resuelto en `a.advisor`, que es el usuario asignado a la actividad.
  */
 export function accionesPorAsesor(activityDays: ActivityDay[], leads: Lead[]): AccionesPorAsesor {
-  const asesorDe = new Map<number, number>();
-  for (const l of leads) asesorDe.set(l.id, l.advisor);
+  const permitidos = new Set<number>();
+  for (const l of leads) permitidos.add(l.id);
 
   const porAsesor = new Map<number, Map<string, number>>();
   const meses = new Set<string>();
 
   for (const a of activityDays) {
-    const asesor = asesorDe.get(a.dealId);
-    if (asesor === undefined) continue;
+    if (!permitidos.has(a.dealId)) continue;
 
     meses.add(a.date.slice(0, 7));
-    let dias = porAsesor.get(asesor);
+    let dias = porAsesor.get(a.advisor);
     if (!dias) {
       dias = new Map();
-      porAsesor.set(asesor, dias);
+      porAsesor.set(a.advisor, dias);
     }
     dias.set(a.date, (dias.get(a.date) ?? 0) + a.count);
   }

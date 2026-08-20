@@ -673,7 +673,7 @@ function PrimerContacto({
       )}
 
       <div className="mt-7 border-t border-border pt-5">
-        <TablaAsesores rows={rows} global={global} acciones={acciones} />
+        <TablaAsesores rows={rows} global={global} acciones={acciones} advisors={advisors} />
       </div>
     </Section>
   );
@@ -744,9 +744,9 @@ function AccionesDiarias({
         <div>
           <h3 className="text-xs font-semibold text-dim">Acciones por asesor, día a día</h3>
           <p className="text-2xs text-muted">
-            {total.toLocaleString('es-CO')} acciones en {monthLabel(mes)} · toda actividad registrada
-            en el CRM (llamada, WhatsApp, correo, reunión, tarea) ubicada el día en que se registró ·
-            clic en un nombre de la leyenda para aislarlo
+            {total.toLocaleString('es-CO')} acciones en {monthLabel(mes)} · toda actividad del CRM
+            (llamada, WhatsApp, correo, reunión, tarea) asignada al asesor, ubicada el día para el
+            que quedó agendada · clic en un nombre de la leyenda para aislarlo
           </p>
         </div>
         <MonthSelect
@@ -895,8 +895,9 @@ function resumenAcciones(
   meta: Meta,
   today: string,
 ): ResumenAcciones {
-  const asesorDe = new Map<number, number>();
-  for (const l of tratosSinFiltroDeTiempo(data, filters, meta)) asesorDe.set(l.id, l.advisor);
+  // El trato decide si la actividad entra al filtro; a quién se le acredita ya
+  // viene resuelto desde el servidor en `a.advisor` (el usuario asignado).
+  const tratosPermitidos = new Set(tratosSinFiltroDeTiempo(data, filters, meta).map((l) => l.id));
 
   const mesPermitido = (mes: string) => {
     if (filters.year !== null && mes.slice(0, 4) !== filters.year) return false;
@@ -911,15 +912,14 @@ function resumenAcciones(
   let ultima: string | null = null;
 
   for (const a of data.activityDays) {
-    const asesor = asesorDe.get(a.dealId);
-    if (asesor === undefined) continue;
+    if (!tratosPermitidos.has(a.dealId)) continue;
     if (!mesPermitido(a.date.slice(0, 7))) continue;
     if (filters.dateFrom && a.date < filters.dateFrom) continue;
     if (filters.dateTo && a.date > filters.dateTo) continue;
 
     if (primera === null || a.date < primera) primera = a.date;
     if (ultima === null || a.date > ultima) ultima = a.date;
-    porAsesor.set(asesor, (porAsesor.get(asesor) ?? 0) + a.count);
+    porAsesor.set(a.advisor, (porAsesor.get(a.advisor) ?? 0) + a.count);
     total += a.count;
   }
 
@@ -954,13 +954,26 @@ function TablaAsesores({
   rows,
   global,
   acciones,
+  advisors,
 }: {
   rows: ContactoRow[];
   global: ContactoRow;
   acciones: ResumenAcciones;
+  advisors: string[];
 }) {
   const { periodo } = acciones;
-  const conTotal = [...rows, global];
+
+  // Quien registró gestión pero no tiene leads propios en el filtro —un apoyo
+  // comercial, alguien que cubrió vacaciones— también necesita fila: si no, sus
+  // actividades aparecerían en el TOTAL y en ninguna línea, y la columna no
+  // cuadraría al sumarla.
+  const conLeads = new Set(rows.map((r) => r.idx));
+  const extra = [...acciones.porAsesor.entries()]
+    .filter(([i, n]) => n > 0 && !conLeads.has(i))
+    .sort((a, b) => b[1] - a[1])
+    .map(([i]) => resumirHoras([], 0, firstName(advisors[i] ?? `#${i}`), i));
+
+  const conTotal = [...rows, ...extra, global];
   const esTotal = (r: ContactoRow) => r === global;
   const actividades = (r: ContactoRow) =>
     r.idx < 0 ? acciones.total : acciones.porAsesor.get(r.idx) ?? 0;
@@ -974,7 +987,8 @@ function TablaAsesores({
       <h3 className="text-xs font-semibold text-dim">Resumen por asesor</h3>
       <p className="mb-3 text-2xs text-muted">
         Leads por rango de tiempo de primer contacto — los mismos de la gráfica, en número de leads ·
-        Actividades registradas en el CRM{' '}
+        Actividades <b>asignadas</b> a cada asesor en Pipedrive, hechas y pendientes, por fecha de
+        vencimiento{' '}
         {periodo.desde && periodo.hasta ? (
           <>
             del {fechaCorta(periodo.desde)} al {fechaCorta(periodo.hasta)}, según el filtro del menú

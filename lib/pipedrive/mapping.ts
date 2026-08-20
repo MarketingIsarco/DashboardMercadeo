@@ -41,6 +41,7 @@ import {
   fetchDealFields,
   fetchPipelines,
   fetchStages,
+  fetchUsers,
   resolveBase,
 } from './client';
 import type { PipedriveActivity, PipedriveDeal } from './client';
@@ -227,32 +228,55 @@ function labelIdsOf(deal: PipedriveDeal): string[] {
 }
 
 /**
- * Actividades agrupadas por trato y día de registro.
+ * Actividades agrupadas por trato, asesor y día.
  *
  * Cuenta **toda** actividad —llamada, WhatsApp, correo, reunión, tarea—, hecha
  * o pendiente: crear la actividad ya es gestión del asesor, y exigir que esté
  * marcada como completada castigaría a quien agenda bien pero no vuelve a
  * marcar la casilla, que es la mitad del CRM.
  *
+ * El asesor sale de `user_id` —a quién está asignada—, no del dueño del trato.
+ * Atribuir por dueño le cargaba a cada asesor todo lo que otros o las
+ * automatizaciones hacían sobre sus leads, y el total no cuadraba con el CRM.
+ *
+ * La fecha es `due_date`, el día para el que quedó agendada, que es por el que
+ * filtra Pipedrive. Cuando falta —dato viejo o mal migrado— se cae a la fecha
+ * de creación para no perder la actividad, y ahí sí se corta la hora a Bogotá:
+ * `add_time` viene en UTC y sin corregir todo lo registrado después de las
+ * 7:00 p. m. se contaba al día siguiente.
+ *
  * `dealIds` deja fuera las actividades sueltas y las de pipelines no mapeados:
- * sin trato no hay asesor a quien atribuirlas ni filtro que aplicarles.
+ * sin trato no hay filtro global que aplicarles.
  */
-function buildActivityDays(activities: PipedriveActivity[], dealIds: Set<number>): ActivityDay[] {
-  const porTratoYDia = new Map<string, ActivityDay>();
+function buildActivityDays(
+  activities: PipedriveActivity[],
+  dealIds: Set<number>,
+  advisorDeUsuario: (userId: number | null) => number,
+): ActivityDay[] {
+  const porClave = new Map<string, ActivityDay>();
 
   for (const a of activities) {
-    if (!a.deal_id || !a.add_time) continue;
-    if (!dealIds.has(a.deal_id)) continue;
+    if (!a.deal_id || !dealIds.has(a.deal_id)) continue;
 
-    const date = a.add_time.slice(0, 10);
-    const key = `${a.deal_id}|${date}`;
-    const prev = porTratoYDia.get(key);
+    const date = a.due_date ?? (a.add_time ? aBogota(a.add_time) : null);
+    if (!date) continue;
+
+    const advisor = advisorDeUsuario(a.user_id);
+    const key = `${a.deal_id}|${advisor}|${date}`;
+    const prev = porClave.get(key);
 
     if (prev) prev.count += 1;
-    else porTratoYDia.set(key, { dealId: a.deal_id, date, count: 1 });
+    else porClave.set(key, { dealId: a.deal_id, advisor, date, count: 1 });
   }
 
-  return [...porTratoYDia.values()];
+  return [...porClave.values()];
+}
+
+/** `YYYY-MM-DD HH:MM:SS` en UTC → el `YYYY-MM-DD` que era en Bogotá (UTC−5). */
+function aBogota(utc: string): string {
+  const t = Date.parse(`${utc.replace(' ', 'T')}Z`);
+  if (Number.isNaN(t)) return utc.slice(0, 10);
+  return new Date(t - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 function phoneOf(deal: PipedriveDeal): string {
@@ -272,12 +296,13 @@ function phoneOf(deal: PipedriveDeal): string {
 export async function loadDashboardData(): Promise<DashboardData> {
   const base = await resolveBase();
 
-  const [deals, activities, stages, pipelines, dealFields] = await Promise.all([
+  const [deals, activities, stages, pipelines, dealFields, users] = await Promise.all([
     fetchAllDeals(base),
     fetchAllActivities(base),
     fetchStages(base),
     fetchPipelines(base),
     fetchDealFields(base),
+    fetchUsers(base),
   ]);
 
   const firstActivity = firstActivityByDeal(activities);
@@ -410,6 +435,21 @@ export async function loadDashboardData(): Promise<DashboardData> {
     .map((s, i) => (DIGITAL_SOURCES.includes(normalize(s)) ? i : -1))
     .filter((i) => i >= 0);
 
+  const dealIds = new Set(leads.map((l) => l.id));
+
+  // El usuario de una actividad entra a la MISMA lista de asesores que los
+  // dueños de trato, emparejando por nombre: así "Damariz Montero" es el mismo
+  // índice venga de un deal o de una actividad. Quien registra gestión sin ser
+  // dueño de ningún trato se agrega al final de la lista, y por eso esto va
+  // después del recorrido de deals.
+  const userName = new Map<number, string>(
+    users.map((u) => [u.id, u.name?.trim() || `Usuario ${u.id}`]),
+  );
+  const advisorDeUsuario = (userId: number | null) =>
+    intern(advisors, advisorIdx, (userId !== null && userName.get(userId)) || 'Sin asignar');
+
+  const activityDays = buildActivityDays(activities, dealIds, advisorDeUsuario);
+
   const meta: Meta = {
     sources,
     campaigns,
@@ -420,13 +460,11 @@ export async function loadDashboardData(): Promise<DashboardData> {
     digitalSources,
   };
 
-  const dealIds = new Set(leads.map((l) => l.id));
-
   return {
     leads,
     sales,
     meetings: buildMeetings(activities, dealIds),
-    activityDays: buildActivityDays(activities, dealIds),
+    activityDays,
     meta,
     fetchedAt: new Date().toISOString(),
     total: leads.length,

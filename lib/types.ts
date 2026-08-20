@@ -127,23 +127,31 @@ export interface Meeting {
 /**
  * Actividades que se registraron sobre un trato en un mismo día.
  *
- * Se agrupa por trato y día en el servidor —no se manda una fila por
+ * Se agrupa por trato, asesor y día en el servidor —no se manda una fila por
  * actividad— porque son ~31.000 y el navegador sólo necesita el conteo. Se
  * conserva el `dealId` en lugar de agregar directo por asesor para que el
  * capítulo pueda aplicarle los filtros globales cruzando por trato, igual que
  * el mapa de calor de reuniones.
  *
- * La fecha es la de `add_time` de la actividad: **cuándo el asesor dejó
- * constancia de la gestión**, no cuándo la marcó como completada. Es la misma
- * decisión que gobierna el tiempo de primer contacto, y por el mismo motivo:
- * muchas llamadas se registran al momento y se cierran días después.
+ * El asesor es el **usuario asignado a la actividad**, no el dueño del trato:
+ * lo que se mide es quién gestionó, no de quién era el lead. Atribuir por dueño
+ * del trato le cargaba a un asesor toda la gestión que otros —o una
+ * automatización— hacían sobre sus leads, y el número no cuadraba con el CRM.
+ *
+ * La fecha es la **de vencimiento** (`due_date`): el día para el que la
+ * actividad quedó agendada. Es el criterio por el que filtra Pipedrive en sus
+ * propios reportes y el que ya usaba el mapa de calor de reuniones, así que las
+ * cifras se pueden auditar contra el CRM sin traducciones. Se cuentan las
+ * actividades hechas **y** las pendientes: crear la actividad ya es gestión.
  */
 export interface ActivityDay {
-  /** Coincide con `Lead.id`: es la llave para filtrar y para saber el asesor. */
+  /** Coincide con `Lead.id`: es la llave para aplicarle los filtros globales. */
   dealId: number;
-  /** `YYYY-MM-DD` en que se registró la actividad. */
+  /** Índice en `Meta.advisors` del usuario asignado a la actividad. */
+  advisor: number;
+  /** `YYYY-MM-DD` para el que quedó agendada la actividad. */
   date: string;
-  /** Cuántas actividades registró ese trato ese día. */
+  /** Cuántas actividades de ese asesor cayeron en ese trato y ese día. */
   count: number;
 }
 
