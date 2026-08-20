@@ -1,18 +1,27 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { useMemo, useState } from 'react';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { ChartBox } from '@/components/charts/ChartBox';
 import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
+import { MonthSelect } from '@/components/ui/MonthSelect';
 import { Section } from '@/components/ui/Section';
 import { MONTH_SHORT, PROJECTS, PROJECT_COLORS, STAGES } from '@/lib/config/negocio';
 import { firstName, fmtHoras, median, monthLabel, pct } from '@/lib/format';
-import { activityState, daysBetween, todayISO } from '@/lib/gestion';
-import type { ActivityState } from '@/lib/gestion';
+import {
+  accionesPorAsesor,
+  activityState,
+  daysBetween,
+  diaSemana,
+  diasDelMes,
+  seriesDelMes,
+  todayISO,
+} from '@/lib/gestion';
+import type { ActivityState, SerieAsesor } from '@/lib/gestion';
 import { applyFilters, isAbierto, isPerdido, isVenta } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { DashboardData, Lead, Meeting, Meta } from '@/lib/types';
@@ -29,6 +38,18 @@ import type { DashboardData, Lead, Meeting, Meta } from '@/lib/types';
 
 /** Las 6 etapas gestionables. "Firma & Entrega" queda fuera: ya no se trabaja. */
 const FUNNEL_STAGES = STAGES.slice(0, 6);
+
+/** Nombres completos de los días, empezando en lunes (0). */
+const DIAS_LARGOS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+
+/** Abreviaturas para el eje, donde no cabe el nombre completo. */
+const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+/** Una línea por asesor. 12 colores: hoy son 11 asesores y crecen sin avisar. */
+const ADVISOR_COLORS = [
+  '#0e6680', '#f59e0b', '#6366f1', '#22c55e', '#e11d48', '#a855f7',
+  '#0891b2', '#c9a96e', '#84cc16', '#f97316', '#64748b', '#db2777',
+];
 
 /** Últimos `n` meses `YYYY-MM` terminando en el mes de `today`, en orden. */
 function lastMonths(today: string, n: number): string[] {
@@ -100,7 +121,13 @@ export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
         </div>
       </Section>
 
-      <PrimerContacto leads={filtered} advisors={meta.advisors} />
+      <PrimerContacto
+        leads={filtered}
+        advisors={meta.advisors}
+        data={data}
+        filters={filters}
+        meta={meta}
+      />
 
       <Section
         title="05 · Mapa de Calor — Reuniones por Horario"
@@ -496,7 +523,19 @@ function resumirHoras(horas: number[], total: number, advisor: string): Contacto
   };
 }
 
-function PrimerContacto({ leads, advisors }: { leads: Lead[]; advisors: string[] }) {
+function PrimerContacto({
+  leads,
+  advisors,
+  data,
+  filters,
+  meta,
+}: {
+  leads: Lead[];
+  advisors: string[];
+  data: DashboardData;
+  filters: FilterState;
+  meta: Meta;
+}) {
   const { rows, global } = useMemo(() => {
     const byAdvisor = new Map<number, Lead[]>();
     for (const l of leads) {
@@ -527,11 +566,11 @@ function PrimerContacto({ leads, advisors }: { leads: Lead[]; advisors: string[]
 
   return (
     <Section
-      title="04 · Tiempo de Primer Contacto por Asesor"
+      title="04 · Actividades Asesores"
       sub={
         <>
-          Horas entre la creación del trato y la primera actividad que el asesor registró en él. Cruce de tratos
-          × actividades por ID de trato, directo de Pipedrive ·{' '}
+          Volumen de gestión diaria y velocidad de primer contacto, por asesor. Cruce de tratos ×
+          actividades por ID de trato, directo de Pipedrive ·{' '}
           <b>
             {global.conDato.toLocaleString('es-CO')} de {global.total.toLocaleString('es-CO')} tratos
           </b>{' '}
@@ -539,6 +578,12 @@ function PrimerContacto({ leads, advisors }: { leads: Lead[]; advisors: string[]
         </>
       }
     >
+      <AccionesDiarias data={data} filters={filters} meta={meta} />
+
+      <div className="mt-7 border-t border-border pt-5">
+        <h3 className="mb-3 text-xs font-semibold text-dim">Tiempo de primer contacto por asesor</h3>
+      </div>
+
       {grafico.length === 0 ? (
         <p className="mt-3 text-xs text-muted">
           Ningún asesor alcanza {MIN_MUESTRA} tratos con primer contacto en el filtro actual.
@@ -564,6 +609,145 @@ function PrimerContacto({ leads, advisors }: { leads: Lead[]; advisors: string[]
         <TablaContacto rows={rows} global={global} />
       </div>
     </Section>
+  );
+}
+
+/**
+ * Tratos sobre los que se cuentan acciones.
+ *
+ * Igual que el mapa de calor, **ignora los filtros de tiempo**: el mes lo elige
+ * el propio capítulo. Si los respetara, filtrar "agosto" borraría las acciones
+ * que el asesor hizo en agosto sobre leads que entraron en marzo — que es justo
+ * la gestión de reactivación que interesa ver aquí.
+ */
+function tratosSinFiltroDeTiempo(data: DashboardData, filters: FilterState, meta: Meta): Lead[] {
+  const sinTiempo: FilterState = {
+    ...filters,
+    months: [],
+    exMonths: [],
+    year: null,
+    dateFrom: null,
+    dateTo: null,
+  };
+  return applyFilters(data.leads, sinTiempo, meta.digitalSources);
+}
+
+function AccionesDiarias({
+  data,
+  filters,
+  meta,
+}: {
+  data: DashboardData;
+  filters: FilterState;
+  meta: Meta;
+}) {
+  const { porAsesor, meses } = useMemo(
+    () => accionesPorAsesor(data.activityDays, tratosSinFiltroDeTiempo(data, filters, meta)),
+    [data, filters, meta],
+  );
+
+  const [mesElegido, setMesElegido] = useState<string | null>(null);
+  // El mes elegido puede desaparecer al cambiar los filtros; ahí se cae al último.
+  const mes = mesElegido && meses.includes(mesElegido) ? mesElegido : meses[meses.length - 1];
+
+  const { dias, series, total } = useMemo(() => {
+    if (!mes) return { dias: [] as string[], series: [] as SerieAsesor[], total: 0 };
+
+    const filas = seriesDelMes(porAsesor, mes, (i) => firstName(meta.advisors[i] ?? `#${i}`));
+    return {
+      dias: diasDelMes(mes),
+      series: filas,
+      total: filas.reduce((a, f) => a + f.suma, 0),
+    };
+  }, [mes, porAsesor, meta.advisors]);
+
+  if (!mes || series.length === 0) {
+    return (
+      <p className="text-xs text-muted">
+        No hay actividades registradas para los filtros actuales.
+      </p>
+    );
+  }
+
+  const esFinDeSemana = (i: number) => diaSemana(dias[i]) >= 5;
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-xs font-semibold text-dim">Acciones por asesor, día a día</h3>
+          <p className="text-2xs text-muted">
+            {total.toLocaleString('es-CO')} acciones en {monthLabel(mes)} · toda actividad registrada
+            en el CRM (llamada, WhatsApp, correo, reunión, tarea) ubicada el día en que se registró ·
+            clic en un nombre de la leyenda para aislarlo
+          </p>
+        </div>
+        <MonthSelect
+          value={mes}
+          months={meses}
+          onChange={setMesElegido}
+          label="Mes de las acciones"
+        />
+      </div>
+
+      <ChartBox height={340}>
+        <Line
+          data={{
+            // Dos líneas por marca: el nombre del día encima del número.
+            labels: dias.map((d) => [DIAS_CORTOS[diaSemana(d)], String(Number(d.slice(8)))]),
+            datasets: series.map((s, i) => ({
+              label: s.asesor,
+              data: s.datos,
+              borderColor: ADVISOR_COLORS[i % ADVISOR_COLORS.length],
+              backgroundColor: ADVISOR_COLORS[i % ADVISOR_COLORS.length],
+              borderWidth: 2,
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              // Recta, no curva: una curva entre el lunes y el martes dibuja
+              // valores intermedios que no existen, y con datos ralos llega a
+              // pintar picos por encima del máximo real del día.
+              tension: 0,
+            })),
+          }}
+          options={{
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: legendBottom,
+              tooltip: {
+                callbacks: {
+                  // El eje va abreviado por espacio; el tooltip sí dice
+                  // "lunes 4 de agosto" completo.
+                  title: (items) => {
+                    const iso = dias[items[0].dataIndex];
+                    return `${DIAS_LARGOS[diaSemana(iso)]} ${Number(iso.slice(8))} de ${monthLabel(
+                      iso.slice(0, 7),
+                    )}`;
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                grid: { color: GRID_COLOR },
+                ticks: {
+                  autoSkip: false,
+                  font: { size: 9 },
+                  // Sábados y domingos en gris claro: el valle del fin de
+                  // semana se lee sin tener que contar días.
+                  color: (ctx) => (esFinDeSemana(ctx.index) ? '#c3c3d1' : TICK_COLOR),
+                },
+              },
+              y: {
+                beginAtZero: true,
+                grid: { color: GRID_COLOR },
+                ticks: { color: TICK_COLOR, precision: 0 },
+                title: { display: true, text: 'Acciones', color: TICK_COLOR, font: { size: 10 } },
+              },
+            },
+          }}
+        />
+      </ChartBox>
+    </div>
   );
 }
 

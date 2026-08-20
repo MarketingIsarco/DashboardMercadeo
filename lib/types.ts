@@ -125,6 +125,29 @@ export interface Meeting {
 }
 
 /**
+ * Actividades que se registraron sobre un trato en un mismo día.
+ *
+ * Se agrupa por trato y día en el servidor —no se manda una fila por
+ * actividad— porque son ~31.000 y el navegador sólo necesita el conteo. Se
+ * conserva el `dealId` en lugar de agregar directo por asesor para que el
+ * capítulo pueda aplicarle los filtros globales cruzando por trato, igual que
+ * el mapa de calor de reuniones.
+ *
+ * La fecha es la de `add_time` de la actividad: **cuándo el asesor dejó
+ * constancia de la gestión**, no cuándo la marcó como completada. Es la misma
+ * decisión que gobierna el tiempo de primer contacto, y por el mismo motivo:
+ * muchas llamadas se registran al momento y se cierran días después.
+ */
+export interface ActivityDay {
+  /** Coincide con `Lead.id`: es la llave para filtrar y para saber el asesor. */
+  dealId: number;
+  /** `YYYY-MM-DD` en que se registró la actividad. */
+  date: string;
+  /** Cuántas actividades registró ese trato ese día. */
+  count: number;
+}
+
+/**
  * Label lists resolved from Pipedrive at request time. Indices in `Lead` point
  * into these, so the two must always travel together.
  */
@@ -145,6 +168,8 @@ export interface DashboardData {
   sales: SaleDeal[];
   /** Reuniones agendadas sobre tratos del dashboard. */
   meetings: Meeting[];
+  /** Actividades registradas por trato y día — capítulo 04 de Gerencia. */
+  activityDays: ActivityDay[];
   meta: Meta;
   /** ISO timestamp of when this payload was pulled from Pipedrive. */
   fetchedAt: string;

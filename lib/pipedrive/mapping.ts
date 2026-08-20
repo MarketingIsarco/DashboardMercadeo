@@ -23,6 +23,7 @@ import {
   STATUS_WON,
 } from '@/lib/types';
 import type {
+  ActivityDay,
   ContentType,
   DashboardData,
   Lead,
@@ -225,6 +226,35 @@ function labelIdsOf(deal: PipedriveDeal): string[] {
   return out;
 }
 
+/**
+ * Actividades agrupadas por trato y día de registro.
+ *
+ * Cuenta **toda** actividad —llamada, WhatsApp, correo, reunión, tarea—, hecha
+ * o pendiente: crear la actividad ya es gestión del asesor, y exigir que esté
+ * marcada como completada castigaría a quien agenda bien pero no vuelve a
+ * marcar la casilla, que es la mitad del CRM.
+ *
+ * `dealIds` deja fuera las actividades sueltas y las de pipelines no mapeados:
+ * sin trato no hay asesor a quien atribuirlas ni filtro que aplicarles.
+ */
+function buildActivityDays(activities: PipedriveActivity[], dealIds: Set<number>): ActivityDay[] {
+  const porTratoYDia = new Map<string, ActivityDay>();
+
+  for (const a of activities) {
+    if (!a.deal_id || !a.add_time) continue;
+    if (!dealIds.has(a.deal_id)) continue;
+
+    const date = a.add_time.slice(0, 10);
+    const key = `${a.deal_id}|${date}`;
+    const prev = porTratoYDia.get(key);
+
+    if (prev) prev.count += 1;
+    else porTratoYDia.set(key, { dealId: a.deal_id, date, count: 1 });
+  }
+
+  return [...porTratoYDia.values()];
+}
+
 function phoneOf(deal: PipedriveDeal): string {
   const p = deal.person_id;
   if (p && typeof p === 'object' && Array.isArray(p.phone)) return p.phone[0]?.value ?? '';
@@ -390,10 +420,13 @@ export async function loadDashboardData(): Promise<DashboardData> {
     digitalSources,
   };
 
+  const dealIds = new Set(leads.map((l) => l.id));
+
   return {
     leads,
     sales,
-    meetings: buildMeetings(activities, new Set(leads.map((l) => l.id))),
+    meetings: buildMeetings(activities, dealIds),
+    activityDays: buildActivityDays(activities, dealIds),
     meta,
     fetchedAt: new Date().toISOString(),
     total: leads.length,

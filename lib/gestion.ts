@@ -1,5 +1,5 @@
 import { ROTTEN_DAYS } from '@/lib/config/negocio';
-import type { Lead } from '@/lib/types';
+import type { ActivityDay, Lead } from '@/lib/types';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -86,4 +86,94 @@ export interface GestionLead extends RottenInfo {
 
 export function enrichGestion(open: Lead[], today: string): GestionLead[] {
   return open.map((lead) => ({ lead, activity: activityState(lead, today), ...rottenInfo(lead, today) }));
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Acciones diarias por asesor (capítulo 04 de Gerencia)
+// ─────────────────────────────────────────────────────────────────────
+
+/** 0 = lunes … 6 = domingo, a partir de `YYYY-MM-DD`. */
+export function diaSemana(iso: string): number {
+  const [y, m, d] = iso.split('-').map(Number);
+  // Mediodía UTC: inmune a que el runtime del servidor esté en otra zona.
+  return (new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay() + 6) % 7;
+}
+
+/** Todos los días `YYYY-MM-DD` de un mes `YYYY-MM`, en orden. */
+export function diasDelMes(month: string): string[] {
+  const [y, m] = month.split('-').map(Number);
+  const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return Array.from({ length: ultimo }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`);
+}
+
+export interface AccionesPorAsesor {
+  /** índice de asesor → (`YYYY-MM-DD` → acciones registradas ese día). */
+  porAsesor: Map<number, Map<string, number>>;
+  /** Meses `YYYY-MM` con al menos una acción, ascendente. */
+  meses: string[];
+}
+
+/**
+ * Reagrupa las actividades por asesor y día.
+ *
+ * `leads` son los que ya pasaron los filtros: las actividades de un trato que
+ * quedó fuera del filtro se ignoran, y las de tratos que no existen en el
+ * dashboard (pipelines no mapeados, tratos borrados) tampoco entran, porque no
+ * hay asesor a quien atribuirlas.
+ *
+ * El asesor de una acción es el **dueño del trato**, no quien creó la
+ * actividad: es la misma definición de "asesor" que usa el resto del dashboard,
+ * y evita que un apoyo administrativo que registra llamadas ajenas aparezca
+ * como el más productivo del equipo.
+ */
+export function accionesPorAsesor(activityDays: ActivityDay[], leads: Lead[]): AccionesPorAsesor {
+  const asesorDe = new Map<number, number>();
+  for (const l of leads) asesorDe.set(l.id, l.advisor);
+
+  const porAsesor = new Map<number, Map<string, number>>();
+  const meses = new Set<string>();
+
+  for (const a of activityDays) {
+    const asesor = asesorDe.get(a.dealId);
+    if (asesor === undefined) continue;
+
+    meses.add(a.date.slice(0, 7));
+    let dias = porAsesor.get(asesor);
+    if (!dias) {
+      dias = new Map();
+      porAsesor.set(asesor, dias);
+    }
+    dias.set(a.date, (dias.get(a.date) ?? 0) + a.count);
+  }
+
+  return { porAsesor, meses: [...meses].sort() };
+}
+
+export interface SerieAsesor {
+  asesor: string;
+  /** Una posición por día del mes, en orden. Los días sin acción son 0. */
+  datos: number[];
+  suma: number;
+}
+
+/**
+ * Serie diaria de cada asesor para un mes, del más activo al menos activo.
+ *
+ * Los asesores sin ninguna acción en el mes se omiten: una línea plana en cero
+ * no dice nada y llena la leyenda de nombres que estorban.
+ */
+export function seriesDelMes(
+  porAsesor: Map<number, Map<string, number>>,
+  month: string,
+  nombreDe: (asesor: number) => string,
+): SerieAsesor[] {
+  const dias = diasDelMes(month);
+
+  return [...porAsesor.entries()]
+    .map(([asesor, porDia]) => {
+      const datos = dias.map((d) => porDia.get(d) ?? 0);
+      return { asesor: nombreDe(asesor), datos, suma: datos.reduce((a, b) => a + b, 0) };
+    })
+    .filter((s) => s.suma > 0)
+    .sort((a, b) => b.suma - a.suma);
 }
