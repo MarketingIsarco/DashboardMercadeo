@@ -7,6 +7,7 @@ import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
 import { DataTable } from '@/components/ui/DataTable';
+import type { Column } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { MonthSelect } from '@/components/ui/MonthSelect';
 import { Section } from '@/components/ui/Section';
@@ -486,6 +487,20 @@ const MIN_MUESTRA = 5;
  */
 const EJE_MAX_H = 200;
 
+/**
+ * Cortes de la distribución de velocidad, en horas. Cada corte cierra su banda
+ * por arriba (`h <= corte`) y todo lo que sobra cae en la última, "más de 24 h".
+ */
+const CORTES_VELOCIDAD_H = [1, 6, 12, 24];
+
+const BANDAS_VELOCIDAD = [
+  { label: 'Menos de 1 h', color: '#4ade80' },
+  { label: '1 a 6 h', color: '#a3e635' },
+  { label: '6 a 12 h', color: '#facc15' },
+  { label: '12 a 24 h', color: '#fb923c' },
+  { label: 'Más de 24 h', color: '#ef4444' },
+];
+
 interface ContactoRow {
   advisor: string;
   total: number;
@@ -494,8 +509,38 @@ interface ContactoRow {
   /** `null` cuando la muestra no llega a `MIN_MUESTRA`. */
   mediana: number | null;
   promedio: number | null;
-  pctBajo1h: number;
-  pctBajo24h: number;
+  /** Un % por banda de `BANDAS_VELOCIDAD`, en orden. Suman exactamente 100. */
+  dist: number[];
+}
+
+/**
+ * Reparte las horas en las bandas y las pasa a porcentajes que suman 100.
+ *
+ * El redondeo es por mayor resto: si cada banda se redondeara por su cuenta la
+ * barra apilada terminaría en 98 % o 103 %, y con cinco bandas eso se ve como
+ * una barra cortada o desbordada del eje.
+ */
+function distribucionVelocidad(horas: number[]): number[] {
+  const conteo = new Array<number>(BANDAS_VELOCIDAD.length).fill(0);
+  for (const h of horas) {
+    const i = CORTES_VELOCIDAD_H.findIndex((corte) => h <= corte);
+    conteo[i === -1 ? CORTES_VELOCIDAD_H.length : i] += 1;
+  }
+  if (horas.length === 0) return conteo;
+
+  const exacto = conteo.map((c) => (c / horas.length) * 100);
+  const salida = exacto.map(Math.floor);
+  let sobrante = 100 - salida.reduce((a, b) => a + b, 0);
+
+  const porResto = exacto
+    .map((v, i) => ({ resto: v - Math.floor(v), i }))
+    .sort((a, b) => b.resto - a.resto);
+  for (const { i } of porResto) {
+    if (sobrante <= 0) break;
+    salida[i] += 1;
+    sobrante -= 1;
+  }
+  return salida;
 }
 
 function semaforoContacto(medianaH: number | null): { color: string; label: string } {
@@ -508,8 +553,6 @@ function semaforoContacto(medianaH: number | null): { color: string; label: stri
 /** Agrega una lista de horas a la forma que consumen la tabla y los gráficos. */
 function resumirHoras(horas: number[], total: number, advisor: string): ContactoRow {
   const suficiente = horas.length >= MIN_MUESTRA;
-  const share = (limite: number) =>
-    horas.length ? Math.round((horas.filter((h) => h <= limite).length / horas.length) * 100) : 0;
 
   return {
     advisor,
@@ -518,8 +561,7 @@ function resumirHoras(horas: number[], total: number, advisor: string): Contacto
     sinDato: total - horas.length,
     mediana: suficiente ? Number(median(horas).toFixed(2)) : null,
     promedio: suficiente ? Number((horas.reduce((a, b) => a + b, 0) / horas.length).toFixed(2)) : null,
-    pctBajo1h: share(1),
-    pctBajo24h: share(24),
+    dist: distribucionVelocidad(horas),
   };
 }
 
@@ -605,8 +647,8 @@ function PrimerContacto({
         </div>
       )}
 
-      <div className="mt-6">
-        <TablaContacto rows={rows} global={global} />
+      <div className="mt-7 border-t border-border pt-5">
+        <ResumenAcciones data={data} filters={filters} meta={meta} />
       </div>
     </Section>
   );
@@ -751,6 +793,333 @@ function AccionesDiarias({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// 04 · Resumen de acciones: promedio diario y promedio mensual
+//
+// Al contrario del gráfico de arriba (que elige el mes con su propio selector),
+// estas dos tablas **sí respetan los filtros de tiempo del menú principal**, y
+// los aplican a la fecha en que se registró la acción, no a la del lead: "julio"
+// aquí es lo que el equipo gestionó en julio, aunque el trato haya entrado en
+// marzo. Los demás filtros (proyecto, unidad, fuente, campaña, estado) sí son
+// propiedades del trato y se resuelven cruzando por `dealId`.
+// ─────────────────────────────────────────────────────────────────────
+
+interface PeriodoAcciones {
+  /** Primer y último día con gestión registrada dentro del filtro. */
+  desde: string | null;
+  hasta: string | null;
+  /** Días de lunes a viernes entre `desde` y `hasta`, ambos incluidos. */
+  diasHabiles: number;
+  /** Meses `YYYY-MM` que toca el periodo, ascendente. */
+  meses: string[];
+}
+
+interface AccionRow {
+  advisor: string;
+  total: number;
+  diasConGestion: number;
+  mejorDia: number;
+  mejorDiaFecha: string | null;
+  mesesConGestion: number;
+  mejorMes: number;
+  mejorMesLabel: string | null;
+  /** Acciones del último mes del periodo y del anterior, para la variación. */
+  ultimo: number;
+  previo: number;
+}
+
+const MS_DIA = 86_400_000;
+
+/** Días hábiles (lun–vie) entre dos `YYYY-MM-DD`, ambos incluidos. */
+function contarDiasHabiles(desde: string, hasta: string): number {
+  const [y1, m1, d1] = desde.split('-').map(Number);
+  const [y2, m2, d2] = hasta.split('-').map(Number);
+  // Mediodía UTC: inmune a la zona horaria del runtime, igual que `diaSemana`.
+  let cur = Date.UTC(y1, m1 - 1, d1, 12);
+  const fin = Date.UTC(y2, m2 - 1, d2, 12);
+
+  let n = 0;
+  while (cur <= fin) {
+    const dow = new Date(cur).getUTCDay();
+    if (dow >= 1 && dow <= 5) n += 1;
+    cur += MS_DIA;
+  }
+  return n;
+}
+
+/** Todos los meses `YYYY-MM` que toca el rango, incluidos los que van vacíos. */
+function mesesEntre(desde: string, hasta: string): string[] {
+  const fin = hasta.slice(0, 7);
+  let [y, m] = desde.split('-').map(Number);
+
+  const out: string[] = [];
+  for (let guard = 0; guard < 600; guard++) {
+    const mes = `${y}-${String(m).padStart(2, '0')}`;
+    out.push(mes);
+    if (mes >= fin) break;
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+
+function resumenAcciones(data: DashboardData, filters: FilterState, meta: Meta) {
+  const asesorDe = new Map<number, number>();
+  for (const l of tratosSinFiltroDeTiempo(data, filters, meta)) asesorDe.set(l.id, l.advisor);
+
+  const monthSet = filters.months.length ? new Set(filters.months) : null;
+  const exMonthSet = filters.exMonths.length ? new Set(filters.exMonths) : null;
+
+  const porAsesor = new Map<number, { dias: Map<string, number>; meses: Map<string, number> }>();
+  const todosDias = new Map<string, number>();
+  const todosMeses = new Map<string, number>();
+  let desde: string | null = null;
+  let hasta: string | null = null;
+
+  for (const a of data.activityDays) {
+    const asesor = asesorDe.get(a.dealId);
+    if (asesor === undefined) continue;
+
+    const mes = a.date.slice(0, 7);
+    if (filters.year !== null && a.date.slice(0, 4) !== filters.year) continue;
+    if (monthSet && !monthSet.has(mes)) continue;
+    if (exMonthSet && exMonthSet.has(mes)) continue;
+    if (filters.dateFrom && a.date < filters.dateFrom) continue;
+    if (filters.dateTo && a.date > filters.dateTo) continue;
+
+    if (desde === null || a.date < desde) desde = a.date;
+    if (hasta === null || a.date > hasta) hasta = a.date;
+
+    let b = porAsesor.get(asesor);
+    if (!b) {
+      b = { dias: new Map(), meses: new Map() };
+      porAsesor.set(asesor, b);
+    }
+    b.dias.set(a.date, (b.dias.get(a.date) ?? 0) + a.count);
+    b.meses.set(mes, (b.meses.get(mes) ?? 0) + a.count);
+    todosDias.set(a.date, (todosDias.get(a.date) ?? 0) + a.count);
+    todosMeses.set(mes, (todosMeses.get(mes) ?? 0) + a.count);
+  }
+
+  const periodo: PeriodoAcciones = {
+    desde,
+    hasta,
+    diasHabiles: desde && hasta ? contarDiasHabiles(desde, hasta) : 0,
+    meses: desde && hasta ? mesesEntre(desde, hasta) : [],
+  };
+  const ultimoMes = periodo.meses[periodo.meses.length - 1];
+  const previoMes = periodo.meses[periodo.meses.length - 2];
+
+  const fila = (
+    advisor: string,
+    dias: Map<string, number>,
+    meses: Map<string, number>,
+  ): AccionRow => {
+    let mejorDia = 0;
+    let mejorDiaFecha: string | null = null;
+    for (const [d, v] of dias) {
+      if (v > mejorDia) {
+        mejorDia = v;
+        mejorDiaFecha = d;
+      }
+    }
+
+    let mejorMes = 0;
+    let mejorMesLabel: string | null = null;
+    for (const [m, v] of meses) {
+      if (v > mejorMes) {
+        mejorMes = v;
+        mejorMesLabel = m;
+      }
+    }
+
+    return {
+      advisor,
+      total: [...dias.values()].reduce((a, b) => a + b, 0),
+      diasConGestion: dias.size,
+      mejorDia,
+      mejorDiaFecha,
+      mesesConGestion: meses.size,
+      mejorMes,
+      mejorMesLabel,
+      ultimo: ultimoMes ? meses.get(ultimoMes) ?? 0 : 0,
+      previo: previoMes ? meses.get(previoMes) ?? 0 : 0,
+    };
+  };
+
+  const rows = [...porAsesor.entries()]
+    .map(([i, b]) => fila(firstName(meta.advisors[i] ?? `#${i}`), b.dias, b.meses))
+    .filter((r) => r.total > 0)
+    .sort((a, b) => b.total - a.total);
+
+  return { rows, global: fila('TOTAL', todosDias, todosMeses), periodo };
+}
+
+/** `2026-08-14` → `'jue 14 Ago 26'`. Cabe en una celda y no se confunde de mes. */
+function fechaCorta(iso: string): string {
+  return `${DIAS_CORTOS[diaSemana(iso)].toLowerCase()} ${Number(iso.slice(8))} ${monthLabel(
+    iso.slice(0, 7),
+  )}`;
+}
+
+function ResumenAcciones({
+  data,
+  filters,
+  meta,
+}: {
+  data: DashboardData;
+  filters: FilterState;
+  meta: Meta;
+}) {
+  const { rows, global, periodo } = useMemo(
+    () => resumenAcciones(data, filters, meta),
+    [data, filters, meta],
+  );
+
+  if (rows.length === 0 || !periodo.desde || !periodo.hasta) {
+    return (
+      <p className="text-xs text-muted">
+        No hay acciones registradas para los filtros actuales.
+      </p>
+    );
+  }
+
+  const conTotal = [...rows, global];
+  const esTotal = (r: AccionRow) => r === global;
+  const nombre = (r: AccionRow) => (
+    <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>
+  );
+  const dec = (v: number) =>
+    v.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const num = (v: number) => v.toLocaleString('es-CO');
+
+  const nMeses = periodo.meses.length;
+  const ultimoMes = periodo.meses[nMeses - 1];
+  const previoMes = periodo.meses[nMeses - 2];
+
+  const columnasMensual: Column<AccionRow>[] = [
+    { header: 'Asesor', cell: nombre },
+    { header: 'Acciones', align: 'right', cell: (r) => num(r.total) },
+    {
+      header: 'Meses con gestión',
+      align: 'right',
+      cell: (r) => (
+        <span className="text-dim">
+          {r.mesesConGestion} de {nMeses}
+        </span>
+      ),
+    },
+    {
+      header: 'Promedio / mes',
+      align: 'right',
+      cell: (r) => <b>{dec(nMeses ? r.total / nMeses : 0)}</b>,
+    },
+    {
+      header: 'Mejor mes',
+      align: 'right',
+      cell: (r) =>
+        r.mejorMesLabel ? (
+          <>
+            {num(r.mejorMes)} <span className="text-muted">· {monthLabel(r.mejorMesLabel)}</span>
+          </>
+        ) : (
+          '–'
+        ),
+    },
+    {
+      header: ultimoMes ? monthLabel(ultimoMes) : 'Último mes',
+      align: 'right',
+      cell: (r) => num(r.ultimo),
+    },
+  ];
+
+  // La variación sólo tiene sentido si el periodo filtrado tiene un mes previo
+  // con el que comparar; con un solo mes la columna sería una fila de guiones.
+  if (previoMes) {
+    columnasMensual.push({
+      header: `vs ${monthLabel(previoMes)}`,
+      align: 'right',
+      cell: (r) => {
+        if (r.previo === 0) return <span className="text-muted">–</span>;
+        const delta = Math.round(((r.ultimo - r.previo) / r.previo) * 100);
+        // Un "+0 %" en verde vende como mejora lo que fue quedarse igual.
+        if (delta === 0) return <span className="text-dim">0%</span>;
+        const color = delta > 0 ? '#22c55e' : '#ef4444';
+        return (
+          <b style={{ color }}>
+            {delta > 0 ? '+' : ''}
+            {delta}%
+          </b>
+        );
+      },
+    });
+  }
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-dim">Resumen de gestión por asesor</h3>
+      <p className="mb-4 text-2xs text-muted">
+        Del {fechaCorta(periodo.desde)} al {fechaCorta(periodo.hasta)}, según los filtros del menú
+        principal · {periodo.diasHabiles} días hábiles · {nMeses} {nMeses === 1 ? 'mes' : 'meses'}
+      </p>
+
+      <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wide text-dim">
+        Promedio diario
+      </h4>
+      <DataTable
+        rows={conTotal}
+        empty="Sin acciones en el filtro actual."
+        columns={[
+          { header: 'Asesor', cell: nombre },
+          { header: 'Acciones', align: 'right', cell: (r) => num(r.total) },
+          {
+            header: 'Días con gestión',
+            align: 'right',
+            cell: (r) => (
+              <span className="text-dim">
+                {r.diasConGestion} de {periodo.diasHabiles}
+              </span>
+            ),
+          },
+          {
+            header: 'Promedio / día hábil',
+            align: 'right',
+            cell: (r) => <b>{dec(periodo.diasHabiles ? r.total / periodo.diasHabiles : 0)}</b>,
+          },
+          {
+            header: 'Promedio / día activo',
+            align: 'right',
+            cell: (r) => (
+              <span className="text-dim">{dec(r.diasConGestion ? r.total / r.diasConGestion : 0)}</span>
+            ),
+          },
+          {
+            header: 'Mejor día',
+            align: 'right',
+            cell: (r) =>
+              r.mejorDiaFecha ? (
+                <>
+                  {num(r.mejorDia)}{' '}
+                  <span className="text-muted">· {fechaCorta(r.mejorDiaFecha)}</span>
+                </>
+              ) : (
+                '–'
+              ),
+          },
+        ]}
+      />
+
+      <h4 className="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wide text-dim">
+        Promedio mensual
+      </h4>
+      <DataTable rows={conTotal} empty="Sin acciones en el filtro actual." columns={columnasMensual} />
+    </div>
+  );
+}
+
 function MedianaContacto({ rows }: { rows: ContactoRow[] }) {
   const reales = rows.map((r) => r.mediana!);
 
@@ -798,20 +1167,14 @@ function MedianaContacto({ rows }: { rows: ContactoRow[] }) {
 }
 
 function DistribucionContacto({ rows }: { rows: ContactoRow[] }) {
-  const bandas = [
-    { label: 'Menos de 1 h', color: '#4ade80', valor: (r: ContactoRow) => r.pctBajo1h },
-    { label: '1 a 24 h', color: '#f59e0b', valor: (r: ContactoRow) => r.pctBajo24h - r.pctBajo1h },
-    { label: 'Más de 24 h', color: '#ef4444', valor: (r: ContactoRow) => 100 - r.pctBajo24h },
-  ];
-
   return (
     <ChartBox height={300}>
       <Bar
         data={{
           labels: rows.map((r) => r.advisor),
-          datasets: bandas.map((b) => ({
+          datasets: BANDAS_VELOCIDAD.map((b, i) => ({
             label: b.label,
-            data: rows.map(b.valor),
+            data: rows.map((r) => r.dist[i]),
             backgroundColor: `${b.color}88`,
             borderColor: b.color,
             borderWidth: 1,
@@ -838,68 +1201,6 @@ function DistribucionContacto({ rows }: { rows: ContactoRow[] }) {
         }}
       />
     </ChartBox>
-  );
-}
-
-function TablaContacto({ rows, global }: { rows: ContactoRow[]; global: ContactoRow }) {
-  const conTotal = [...rows, global];
-  const esTotal = (r: ContactoRow) => r === global;
-  const tiempo = (h: number | null) => (h === null ? '–' : fmtHoras(h));
-
-  return (
-    <DataTable
-      rows={conTotal}
-      empty="Sin tratos en el filtro actual."
-      columns={[
-        {
-          header: 'Asesor',
-          cell: (r) => <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>,
-        },
-        { header: 'Tratos', align: 'right', cell: (r) => r.total.toLocaleString('es-CO') },
-        { header: 'Con 1er contacto', align: 'right', cell: (r) => r.conDato.toLocaleString('es-CO') },
-        {
-          header: 'Sin registro',
-          align: 'right',
-          cell: (r) => <span className="text-muted">{r.sinDato.toLocaleString('es-CO')}</span>,
-        },
-        {
-          header: 'Mediana',
-          align: 'right',
-          cell: (r) => (
-            <b style={{ color: semaforoContacto(r.mediana).color }}>{tiempo(r.mediana)}</b>
-          ),
-        },
-        {
-          header: 'Promedio',
-          align: 'right',
-          cell: (r) => <span className="text-dim">{tiempo(r.promedio)}</span>,
-        },
-        {
-          header: '% < 1h',
-          align: 'right',
-          cell: (r) => (r.conDato >= MIN_MUESTRA ? `${r.pctBajo1h}%` : '–'),
-        },
-        {
-          header: '% < 24h',
-          align: 'right',
-          cell: (r) => (r.conDato >= MIN_MUESTRA ? `${r.pctBajo24h}%` : '–'),
-        },
-        {
-          header: 'Semáforo',
-          cell: (r) => {
-            const s = semaforoContacto(r.mediana);
-            return (
-              <span
-                className="whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold"
-                style={{ background: `${s.color}22`, color: s.color }}
-              >
-                {s.label}
-              </span>
-            );
-          },
-        },
-      ]}
-    />
   );
 }
 
