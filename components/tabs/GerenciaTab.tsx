@@ -7,7 +7,6 @@ import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
 import { DataTable } from '@/components/ui/DataTable';
-import type { Column } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { MonthSelect } from '@/components/ui/MonthSelect';
 import { Section } from '@/components/ui/Section';
@@ -493,15 +492,22 @@ const EJE_MAX_H = 200;
  */
 const CORTES_VELOCIDAD_H = [1, 6, 12, 24];
 
+/**
+ * `color` pinta la barra apilada; `texto` es el mismo tono bajado para que el
+ * número de la tabla se lea sobre blanco (el lima y el amarillo brillantes
+ * desaparecen en texto pequeño).
+ */
 const BANDAS_VELOCIDAD = [
-  { label: 'Menos de 1 h', color: '#4ade80' },
-  { label: '1 a 6 h', color: '#a3e635' },
-  { label: '6 a 12 h', color: '#facc15' },
-  { label: '12 a 24 h', color: '#fb923c' },
-  { label: 'Más de 24 h', color: '#ef4444' },
+  { label: 'Menos de 1 h', corto: '< 1 h', color: '#4ade80', texto: '#16a34a' },
+  { label: '1 a 6 h', corto: '1 a 6 h', color: '#a3e635', texto: '#65a30d' },
+  { label: '6 a 12 h', corto: '6 a 12 h', color: '#facc15', texto: '#ca8a04' },
+  { label: '12 a 24 h', corto: '12 a 24 h', color: '#fb923c', texto: '#ea580c' },
+  { label: 'Más de 24 h', corto: '> 24 h', color: '#ef4444', texto: '#dc2626' },
 ];
 
 interface ContactoRow {
+  /** Índice del asesor en `meta.advisors`; `-1` en la fila TOTAL. */
+  idx: number;
   advisor: string;
   total: number;
   conDato: number;
@@ -509,26 +515,34 @@ interface ContactoRow {
   /** `null` cuando la muestra no llega a `MIN_MUESTRA`. */
   mediana: number | null;
   promedio: number | null;
-  /** Un % por banda de `BANDAS_VELOCIDAD`, en orden. Suman exactamente 100. */
+  /** Tratos en cada banda de `BANDAS_VELOCIDAD`, en orden. Suman `conDato`. */
+  conteo: number[];
+  /** Los mismos datos en % — es lo que apila la gráfica. Suman 100. */
   dist: number[];
 }
 
-/**
- * Reparte las horas en las bandas y las pasa a porcentajes que suman 100.
- *
- * El redondeo es por mayor resto: si cada banda se redondeara por su cuenta la
- * barra apilada terminaría en 98 % o 103 %, y con cinco bandas eso se ve como
- * una barra cortada o desbordada del eje.
- */
-function distribucionVelocidad(horas: number[]): number[] {
+/** Cuántos tratos cae en cada banda de velocidad. */
+function conteoVelocidad(horas: number[]): number[] {
   const conteo = new Array<number>(BANDAS_VELOCIDAD.length).fill(0);
   for (const h of horas) {
     const i = CORTES_VELOCIDAD_H.findIndex((corte) => h <= corte);
     conteo[i === -1 ? CORTES_VELOCIDAD_H.length : i] += 1;
   }
-  if (horas.length === 0) return conteo;
+  return conteo;
+}
 
-  const exacto = conteo.map((c) => (c / horas.length) * 100);
+/**
+ * Pasa el conteo por banda a porcentajes que suman exactamente 100.
+ *
+ * El redondeo es por mayor resto: si cada banda se redondeara por su cuenta la
+ * barra apilada terminaría en 98 % o 103 %, y con cinco bandas eso se ve como
+ * una barra cortada o desbordada del eje.
+ */
+function distribucionVelocidad(conteo: number[]): number[] {
+  const n = conteo.reduce((a, b) => a + b, 0);
+  if (n === 0) return conteo.map(() => 0);
+
+  const exacto = conteo.map((c) => (c / n) * 100);
   const salida = exacto.map(Math.floor);
   let sobrante = 100 - salida.reduce((a, b) => a + b, 0);
 
@@ -551,17 +565,20 @@ function semaforoContacto(medianaH: number | null): { color: string; label: stri
 }
 
 /** Agrega una lista de horas a la forma que consumen la tabla y los gráficos. */
-function resumirHoras(horas: number[], total: number, advisor: string): ContactoRow {
+function resumirHoras(horas: number[], total: number, advisor: string, idx: number): ContactoRow {
   const suficiente = horas.length >= MIN_MUESTRA;
+  const conteo = conteoVelocidad(horas);
 
   return {
+    idx,
     advisor,
     total,
     conDato: horas.length,
     sinDato: total - horas.length,
     mediana: suficiente ? Number(median(horas).toFixed(2)) : null,
     promedio: suficiente ? Number((horas.reduce((a, b) => a + b, 0) / horas.length).toFixed(2)) : null,
-    dist: distribucionVelocidad(horas),
+    conteo,
+    dist: distribucionVelocidad(conteo),
   };
 }
 
@@ -590,7 +607,7 @@ function PrimerContacto({
       ls.map((l) => l.firstContactHours).filter((h): h is number => h !== null);
 
     const all = [...byAdvisor.entries()].map(([i, ls]) =>
-      resumirHoras(horasDe(ls), ls.length, firstName(advisors[i] ?? `#${i}`)),
+      resumirHoras(horasDe(ls), ls.length, firstName(advisors[i] ?? `#${i}`), i),
     );
 
     // Los asesores sin muestra suficiente van al final: ordenarlos por una
@@ -600,9 +617,17 @@ function PrimerContacto({
 
     return {
       rows: [...conMuestra, ...sinMuestra],
-      global: resumirHoras(horasDe(leads), leads.length, 'TOTAL'),
+      global: resumirHoras(horasDe(leads), leads.length, 'TOTAL', -1),
     };
   }, [leads, advisors]);
+
+  // `today` se congela por render para que el divisor del promedio no cambie a
+  // media tabla si el navegador queda abierto cruzando la medianoche.
+  const today = useMemo(() => todayISO(), []);
+  const acciones = useMemo(
+    () => resumenAcciones(data, filters, meta, today),
+    [data, filters, meta, today],
+  );
 
   const grafico = rows.filter((r) => r.mediana !== null);
 
@@ -648,7 +673,7 @@ function PrimerContacto({
       )}
 
       <div className="mt-7 border-t border-border pt-5">
-        <ResumenAcciones data={data} filters={filters} meta={meta} />
+        <TablaAsesores rows={rows} global={global} acciones={acciones} />
       </div>
     </Section>
   );
@@ -794,328 +819,214 @@ function AccionesDiarias({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 04 · Resumen de acciones: promedio diario y promedio mensual
+// 04 · Tabla resumen por asesor
 //
-// Al contrario del gráfico de arriba (que elige el mes con su propio selector),
-// estas dos tablas **sí respetan los filtros de tiempo del menú principal**, y
-// los aplican a la fecha en que se registró la acción, no a la del lead: "julio"
-// aquí es lo que el equipo gestionó en julio, aunque el trato haya entrado en
-// marzo. Los demás filtros (proyecto, unidad, fuente, campaña, estado) sí son
-// propiedades del trato y se resuelven cruzando por `dealId`.
+// Junta las dos mitades del capítulo: cuántos leads atendió cada asesor en cada
+// rango de velocidad (los mismos de la gráfica de al lado) y cuánta actividad
+// registró en el periodo.
+//
+// Al contrario del gráfico de acciones día a día (que elige el mes con su
+// propio selector), esta tabla **sí respeta los filtros de tiempo del menú
+// principal**, y los aplica a la fecha en que se registró la actividad, no a la
+// del lead: "julio" aquí es lo que el equipo gestionó en julio, aunque el trato
+// haya entrado en marzo. Los demás filtros (proyecto, unidad, fuente, campaña,
+// estado) sí son propiedades del trato y se resuelven cruzando por `dealId`.
 // ─────────────────────────────────────────────────────────────────────
-
-interface PeriodoAcciones {
-  /** Primer y último día con gestión registrada dentro del filtro. */
-  desde: string | null;
-  hasta: string | null;
-  /** Días de lunes a viernes entre `desde` y `hasta`, ambos incluidos. */
-  diasHabiles: number;
-  /** Meses `YYYY-MM` que toca el periodo, ascendente. */
-  meses: string[];
-}
-
-interface AccionRow {
-  advisor: string;
-  total: number;
-  diasConGestion: number;
-  mejorDia: number;
-  mejorDiaFecha: string | null;
-  mesesConGestion: number;
-  mejorMes: number;
-  mejorMesLabel: string | null;
-  /** Acciones del último mes del periodo y del anterior, para la variación. */
-  ultimo: number;
-  previo: number;
-}
 
 const MS_DIA = 86_400_000;
 
-/** Días hábiles (lun–vie) entre dos `YYYY-MM-DD`, ambos incluidos. */
-function contarDiasHabiles(desde: string, hasta: string): number {
-  const [y1, m1, d1] = desde.split('-').map(Number);
-  const [y2, m2, d2] = hasta.split('-').map(Number);
-  // Mediodía UTC: inmune a la zona horaria del runtime, igual que `diaSemana`.
-  let cur = Date.UTC(y1, m1 - 1, d1, 12);
-  const fin = Date.UTC(y2, m2 - 1, d2, 12);
-
-  let n = 0;
-  while (cur <= fin) {
-    const dow = new Date(cur).getUTCDay();
-    if (dow >= 1 && dow <= 5) n += 1;
-    cur += MS_DIA;
-  }
-  return n;
+/** Mediodía UTC: inmune a la zona horaria del runtime, igual que `diaSemana`. */
+function aFecha(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12));
 }
 
-/** Todos los meses `YYYY-MM` que toca el rango, incluidos los que van vacíos. */
-function mesesEntre(desde: string, hasta: string): string[] {
-  const fin = hasta.slice(0, 7);
-  let [y, m] = desde.split('-').map(Number);
-
-  const out: string[] = [];
-  for (let guard = 0; guard < 600; guard++) {
-    const mes = `${y}-${String(m).padStart(2, '0')}`;
-    out.push(mes);
-    if (mes >= fin) break;
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-  }
-  return out;
+/** `2026-08` → `'2026-08-31'`. */
+function ultimoDiaDelMes(mes: string): string {
+  const [y, m] = mes.split('-').map(Number);
+  return `${mes}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
 }
 
-function resumenAcciones(data: DashboardData, filters: FilterState, meta: Meta) {
+interface PeriodoAcciones {
+  desde: string | null;
+  hasta: string | null;
+  /** Días de lunes a viernes del periodo. Es el divisor del promedio diario. */
+  diasHabiles: number;
+  /** Meses del periodo. Es el divisor del promedio mensual. */
+  meses: number;
+}
+
+interface ResumenAcciones {
+  /** Índice de asesor → actividades registradas en el periodo. */
+  porAsesor: Map<number, number>;
+  total: number;
+  periodo: PeriodoAcciones;
+}
+
+/**
+ * Rango de fechas que declara el filtro de tiempo, sin mirar los datos.
+ *
+ * Es lo que hace que el promedio diario signifique algo: si el divisor saliera
+ * de la primera y la última actividad encontradas, un mes en el que el equipo
+ * sólo registró gestión tres días daría "600 actividades diarias". El periodo
+ * es el que el usuario pidió, y nunca pasa de hoy — los días que todavía no han
+ * ocurrido no se promedian.
+ */
+function rangoDelFiltro(filters: FilterState, today: string): { desde: string | null; hasta: string | null } {
+  const tope = (fin: string) => (fin < today ? fin : today);
+
+  if (filters.dateFrom || filters.dateTo) {
+    return { desde: filters.dateFrom, hasta: filters.dateTo ? tope(filters.dateTo) : today };
+  }
+  if (filters.months.length) {
+    const ms = [...filters.months].sort();
+    return { desde: `${ms[0]}-01`, hasta: tope(ultimoDiaDelMes(ms[ms.length - 1])) };
+  }
+  if (filters.year) {
+    return { desde: `${filters.year}-01-01`, hasta: tope(`${filters.year}-12-31`) };
+  }
+  // Sin filtro de tiempo el periodo lo marcan los datos, en el llamador.
+  return { desde: null, hasta: null };
+}
+
+function resumenAcciones(
+  data: DashboardData,
+  filters: FilterState,
+  meta: Meta,
+  today: string,
+): ResumenAcciones {
   const asesorDe = new Map<number, number>();
   for (const l of tratosSinFiltroDeTiempo(data, filters, meta)) asesorDe.set(l.id, l.advisor);
 
-  const monthSet = filters.months.length ? new Set(filters.months) : null;
-  const exMonthSet = filters.exMonths.length ? new Set(filters.exMonths) : null;
+  const mesPermitido = (mes: string) => {
+    if (filters.year !== null && mes.slice(0, 4) !== filters.year) return false;
+    if (filters.months.length && !filters.months.includes(mes)) return false;
+    if (filters.exMonths.includes(mes)) return false;
+    return true;
+  };
 
-  const porAsesor = new Map<number, { dias: Map<string, number>; meses: Map<string, number> }>();
-  const todosDias = new Map<string, number>();
-  const todosMeses = new Map<string, number>();
-  let desde: string | null = null;
-  let hasta: string | null = null;
+  const porAsesor = new Map<number, number>();
+  let total = 0;
+  let primera: string | null = null;
+  let ultima: string | null = null;
 
   for (const a of data.activityDays) {
     const asesor = asesorDe.get(a.dealId);
     if (asesor === undefined) continue;
-
-    const mes = a.date.slice(0, 7);
-    if (filters.year !== null && a.date.slice(0, 4) !== filters.year) continue;
-    if (monthSet && !monthSet.has(mes)) continue;
-    if (exMonthSet && exMonthSet.has(mes)) continue;
+    if (!mesPermitido(a.date.slice(0, 7))) continue;
     if (filters.dateFrom && a.date < filters.dateFrom) continue;
     if (filters.dateTo && a.date > filters.dateTo) continue;
 
-    if (desde === null || a.date < desde) desde = a.date;
-    if (hasta === null || a.date > hasta) hasta = a.date;
-
-    let b = porAsesor.get(asesor);
-    if (!b) {
-      b = { dias: new Map(), meses: new Map() };
-      porAsesor.set(asesor, b);
-    }
-    b.dias.set(a.date, (b.dias.get(a.date) ?? 0) + a.count);
-    b.meses.set(mes, (b.meses.get(mes) ?? 0) + a.count);
-    todosDias.set(a.date, (todosDias.get(a.date) ?? 0) + a.count);
-    todosMeses.set(mes, (todosMeses.get(mes) ?? 0) + a.count);
+    if (primera === null || a.date < primera) primera = a.date;
+    if (ultima === null || a.date > ultima) ultima = a.date;
+    porAsesor.set(asesor, (porAsesor.get(asesor) ?? 0) + a.count);
+    total += a.count;
   }
 
-  const periodo: PeriodoAcciones = {
-    desde,
-    hasta,
-    diasHabiles: desde && hasta ? contarDiasHabiles(desde, hasta) : 0,
-    meses: desde && hasta ? mesesEntre(desde, hasta) : [],
-  };
-  const ultimoMes = periodo.meses[periodo.meses.length - 1];
-  const previoMes = periodo.meses[periodo.meses.length - 2];
+  const rango = rangoDelFiltro(filters, today);
+  const desde = rango.desde ?? primera;
+  const hasta = rango.hasta ?? ultima;
 
-  const fila = (
-    advisor: string,
-    dias: Map<string, number>,
-    meses: Map<string, number>,
-  ): AccionRow => {
-    let mejorDia = 0;
-    let mejorDiaFecha: string | null = null;
-    for (const [d, v] of dias) {
-      if (v > mejorDia) {
-        mejorDia = v;
-        mejorDiaFecha = d;
-      }
+  // Los días se cuentan uno a uno y no por resta de fechas: así los meses
+  // excluidos con "Sin …" no inflan el divisor con días que no aportan nada.
+  let diasHabiles = 0;
+  const meses = new Set<string>();
+  if (desde && hasta && desde <= hasta) {
+    for (let t = aFecha(desde).getTime(); t <= aFecha(hasta).getTime(); t += MS_DIA) {
+      const d = new Date(t);
+      const mes = d.toISOString().slice(0, 7);
+      if (!mesPermitido(mes)) continue;
+      meses.add(mes);
+      const dow = d.getUTCDay();
+      if (dow >= 1 && dow <= 5) diasHabiles += 1;
     }
+  }
 
-    let mejorMes = 0;
-    let mejorMesLabel: string | null = null;
-    for (const [m, v] of meses) {
-      if (v > mejorMes) {
-        mejorMes = v;
-        mejorMesLabel = m;
-      }
-    }
-
-    return {
-      advisor,
-      total: [...dias.values()].reduce((a, b) => a + b, 0),
-      diasConGestion: dias.size,
-      mejorDia,
-      mejorDiaFecha,
-      mesesConGestion: meses.size,
-      mejorMes,
-      mejorMesLabel,
-      ultimo: ultimoMes ? meses.get(ultimoMes) ?? 0 : 0,
-      previo: previoMes ? meses.get(previoMes) ?? 0 : 0,
-    };
-  };
-
-  const rows = [...porAsesor.entries()]
-    .map(([i, b]) => fila(firstName(meta.advisors[i] ?? `#${i}`), b.dias, b.meses))
-    .filter((r) => r.total > 0)
-    .sort((a, b) => b.total - a.total);
-
-  return { rows, global: fila('TOTAL', todosDias, todosMeses), periodo };
+  return { porAsesor, total, periodo: { desde, hasta, diasHabiles, meses: meses.size } };
 }
 
-/** `2026-08-14` → `'jue 14 Ago 26'`. Cabe en una celda y no se confunde de mes. */
+/** `2026-08-03` → `'3 Ago 26'`. */
 function fechaCorta(iso: string): string {
-  return `${DIAS_CORTOS[diaSemana(iso)].toLowerCase()} ${Number(iso.slice(8))} ${monthLabel(
-    iso.slice(0, 7),
-  )}`;
+  return `${Number(iso.slice(8))} ${monthLabel(iso.slice(0, 7))}`;
 }
 
-function ResumenAcciones({
-  data,
-  filters,
-  meta,
+function TablaAsesores({
+  rows,
+  global,
+  acciones,
 }: {
-  data: DashboardData;
-  filters: FilterState;
-  meta: Meta;
+  rows: ContactoRow[];
+  global: ContactoRow;
+  acciones: ResumenAcciones;
 }) {
-  const { rows, global, periodo } = useMemo(
-    () => resumenAcciones(data, filters, meta),
-    [data, filters, meta],
-  );
-
-  if (rows.length === 0 || !periodo.desde || !periodo.hasta) {
-    return (
-      <p className="text-xs text-muted">
-        No hay acciones registradas para los filtros actuales.
-      </p>
-    );
-  }
-
+  const { periodo } = acciones;
   const conTotal = [...rows, global];
-  const esTotal = (r: AccionRow) => r === global;
-  const nombre = (r: AccionRow) => (
-    <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>
-  );
+  const esTotal = (r: ContactoRow) => r === global;
+  const actividades = (r: ContactoRow) =>
+    r.idx < 0 ? acciones.total : acciones.porAsesor.get(r.idx) ?? 0;
+
+  const num = (v: number) => v.toLocaleString('es-CO');
   const dec = (v: number) =>
     v.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const num = (v: number) => v.toLocaleString('es-CO');
-
-  const nMeses = periodo.meses.length;
-  const ultimoMes = periodo.meses[nMeses - 1];
-  const previoMes = periodo.meses[nMeses - 2];
-
-  const columnasMensual: Column<AccionRow>[] = [
-    { header: 'Asesor', cell: nombre },
-    { header: 'Acciones', align: 'right', cell: (r) => num(r.total) },
-    {
-      header: 'Meses con gestión',
-      align: 'right',
-      cell: (r) => (
-        <span className="text-dim">
-          {r.mesesConGestion} de {nMeses}
-        </span>
-      ),
-    },
-    {
-      header: 'Promedio / mes',
-      align: 'right',
-      cell: (r) => <b>{dec(nMeses ? r.total / nMeses : 0)}</b>,
-    },
-    {
-      header: 'Mejor mes',
-      align: 'right',
-      cell: (r) =>
-        r.mejorMesLabel ? (
-          <>
-            {num(r.mejorMes)} <span className="text-muted">· {monthLabel(r.mejorMesLabel)}</span>
-          </>
-        ) : (
-          '–'
-        ),
-    },
-    {
-      header: ultimoMes ? monthLabel(ultimoMes) : 'Último mes',
-      align: 'right',
-      cell: (r) => num(r.ultimo),
-    },
-  ];
-
-  // La variación sólo tiene sentido si el periodo filtrado tiene un mes previo
-  // con el que comparar; con un solo mes la columna sería una fila de guiones.
-  if (previoMes) {
-    columnasMensual.push({
-      header: `vs ${monthLabel(previoMes)}`,
-      align: 'right',
-      cell: (r) => {
-        if (r.previo === 0) return <span className="text-muted">–</span>;
-        const delta = Math.round(((r.ultimo - r.previo) / r.previo) * 100);
-        // Un "+0 %" en verde vende como mejora lo que fue quedarse igual.
-        if (delta === 0) return <span className="text-dim">0%</span>;
-        const color = delta > 0 ? '#22c55e' : '#ef4444';
-        return (
-          <b style={{ color }}>
-            {delta > 0 ? '+' : ''}
-            {delta}%
-          </b>
-        );
-      },
-    });
-  }
 
   return (
     <div>
-      <h3 className="text-xs font-semibold text-dim">Resumen de gestión por asesor</h3>
-      <p className="mb-4 text-2xs text-muted">
-        Del {fechaCorta(periodo.desde)} al {fechaCorta(periodo.hasta)}, según los filtros del menú
-        principal · {periodo.diasHabiles} días hábiles · {nMeses} {nMeses === 1 ? 'mes' : 'meses'}
+      <h3 className="text-xs font-semibold text-dim">Resumen por asesor</h3>
+      <p className="mb-3 text-2xs text-muted">
+        Leads por rango de tiempo de primer contacto — los mismos de la gráfica, en número de leads ·
+        Actividades registradas en el CRM{' '}
+        {periodo.desde && periodo.hasta ? (
+          <>
+            del {fechaCorta(periodo.desde)} al {fechaCorta(periodo.hasta)}, según el filtro del menú
+            principal: <b>{periodo.diasHabiles} días hábiles</b> y{' '}
+            <b>
+              {periodo.meses} {periodo.meses === 1 ? 'mes' : 'meses'}
+            </b>
+          </>
+        ) : (
+          'en el filtro actual'
+        )}
       </p>
 
-      <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wide text-dim">
-        Promedio diario
-      </h4>
       <DataTable
         rows={conTotal}
-        empty="Sin acciones en el filtro actual."
+        empty="Sin tratos en el filtro actual."
         columns={[
-          { header: 'Asesor', cell: nombre },
-          { header: 'Acciones', align: 'right', cell: (r) => num(r.total) },
           {
-            header: 'Días con gestión',
-            align: 'right',
+            header: 'Asesor',
             cell: (r) => (
-              <span className="text-dim">
-                {r.diasConGestion} de {periodo.diasHabiles}
-              </span>
+              <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>
             ),
           },
-          {
-            header: 'Promedio / día hábil',
-            align: 'right',
-            cell: (r) => <b>{dec(periodo.diasHabiles ? r.total / periodo.diasHabiles : 0)}</b>,
-          },
-          {
-            header: 'Promedio / día activo',
-            align: 'right',
-            cell: (r) => (
-              <span className="text-dim">{dec(r.diasConGestion ? r.total / r.diasConGestion : 0)}</span>
-            ),
-          },
-          {
-            header: 'Mejor día',
-            align: 'right',
-            cell: (r) =>
-              r.mejorDiaFecha ? (
-                <>
-                  {num(r.mejorDia)}{' '}
-                  <span className="text-muted">· {fechaCorta(r.mejorDiaFecha)}</span>
-                </>
+          ...BANDAS_VELOCIDAD.map((b, i) => ({
+            header: b.corto,
+            align: 'right' as const,
+            cell: (r: ContactoRow) =>
+              r.conteo[i] ? (
+                <b style={{ color: b.texto }}>{num(r.conteo[i])}</b>
               ) : (
-                '–'
+                <span className="text-muted">0</span>
               ),
+          })),
+          {
+            header: 'Actividades / día hábil',
+            align: 'right',
+            cell: (r) => <b>{dec(periodo.diasHabiles ? actividades(r) / periodo.diasHabiles : 0)}</b>,
+          },
+          {
+            header: 'Actividades / mes',
+            align: 'right',
+            cell: (r) => (
+              <span className="text-dim">{dec(periodo.meses ? actividades(r) / periodo.meses : 0)}</span>
+            ),
+          },
+          {
+            header: 'Total actividades',
+            align: 'right',
+            cell: (r) => num(actividades(r)),
           },
         ]}
       />
-
-      <h4 className="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wide text-dim">
-        Promedio mensual
-      </h4>
-      <DataTable rows={conTotal} empty="Sin acciones en el filtro actual." columns={columnasMensual} />
     </div>
   );
 }
