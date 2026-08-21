@@ -52,15 +52,17 @@ export interface PipedriveActivity {
   /** `null` en actividades sueltas, no atadas a ningún trato. */
   deal_id: number | null;
   /**
-   * Usuario **al que está asignada** la actividad: el asesor que la tiene que
-   * hacer, y el criterio por el que Pipedrive filtra en sus propios reportes.
-   *
-   * No confundir con `created_by_user_id`, que es quien la creó. En una cuenta
-   * con automatizaciones ese segundo es el usuario del robot, no el asesor.
+   * Quien **creó** la actividad. Es la definición de "gestión del asesor" que
+   * usa el dashboard: mide quién levantó el teléfono y dejó constancia, no a
+   * quién le quedó la tarea pendiente.
+   */
+  created_by_user_id: number | null;
+  /**
+   * Usuario al que está **asignada**. Sólo se usa como respaldo cuando el
+   * creador no viene. No es lo mismo: una tarea puede asignarse a un asesor
+   * y haberla creado otro, o una automatización.
    */
   user_id: number | null;
-  /** Quien creó la actividad. Sin uso hoy; queda declarado para auditorías. */
-  created_by_user_id?: number | null;
   /** `YYYY-MM-DD HH:MM:SS` — "Hora de añadición": cuándo se registró en el CRM. */
   add_time: string | null;
   /** `YYYY-MM-DD HH:MM:SS` — cuándo se marcó como completada, o `null`. */

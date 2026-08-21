@@ -77,6 +77,16 @@ export interface Lead {
    * del modelo que no se puede derivar del deal solo.
    */
   firstContactHours: number | null;
+
+  /**
+   * Índice en `Meta.advisors` de quien **creó** la primera actividad del trato;
+   * `-1` cuando no hay ninguna.
+   *
+   * El tiempo de primer contacto se le acredita a quien atendió el lead, que no
+   * siempre es su dueño: un asesor puede cubrir los leads de otro un fin de
+   * semana, y esa respuesta es suya.
+   */
+  firstContactBy: number;
 }
 
 /**

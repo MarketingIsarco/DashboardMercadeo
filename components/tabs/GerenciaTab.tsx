@@ -596,18 +596,22 @@ function PrimerContacto({
   meta: Meta;
 }) {
   const { rows, global } = useMemo(() => {
-    const byAdvisor = new Map<number, Lead[]>();
+    // Se agrupa por `firstContactBy` —quien CREÓ la primera actividad del
+    // trato—, no por el dueño del lead: lo que mide este capítulo es quién
+    // atendió, y un asesor que cubre los leads de otro se gana esa respuesta.
+    const porAtendedor = new Map<number, number[]>();
+    const todas: number[] = [];
+
     for (const l of leads) {
-      const bucket = byAdvisor.get(l.advisor);
-      if (bucket) bucket.push(l);
-      else byAdvisor.set(l.advisor, [l]);
+      if (l.firstContactHours === null || l.firstContactBy < 0) continue;
+      todas.push(l.firstContactHours);
+      const bucket = porAtendedor.get(l.firstContactBy);
+      if (bucket) bucket.push(l.firstContactHours);
+      else porAtendedor.set(l.firstContactBy, [l.firstContactHours]);
     }
 
-    const horasDe = (ls: Lead[]) =>
-      ls.map((l) => l.firstContactHours).filter((h): h is number => h !== null);
-
-    const all = [...byAdvisor.entries()].map(([i, ls]) =>
-      resumirHoras(horasDe(ls), ls.length, firstName(advisors[i] ?? `#${i}`), i),
+    const all = [...porAtendedor.entries()].map(([i, horas]) =>
+      resumirHoras(horas, horas.length, firstName(advisors[i] ?? `#${i}`), i),
     );
 
     // Los asesores sin muestra suficiente van al final: ordenarlos por una
@@ -617,7 +621,7 @@ function PrimerContacto({
 
     return {
       rows: [...conMuestra, ...sinMuestra],
-      global: resumirHoras(horasDe(leads), leads.length, 'TOTAL', -1),
+      global: resumirHoras(todas, leads.length, 'TOTAL', -1),
     };
   }, [leads, advisors]);
 
@@ -636,8 +640,9 @@ function PrimerContacto({
       title="04 · Actividades Asesores"
       sub={
         <>
-          Volumen de gestión diaria y velocidad de primer contacto, por asesor. Cruce de tratos ×
-          actividades por ID de trato, directo de Pipedrive ·{' '}
+          Volumen de gestión diaria y velocidad de primer contacto, por asesor. Todo se acredita a
+          quien <b>creó</b> la actividad en Pipedrive, no a quien la tenía asignada ni al dueño del
+          trato ·{' '}
           <b>
             {global.conDato.toLocaleString('es-CO')} de {global.total.toLocaleString('es-CO')} tratos
           </b>{' '}
@@ -660,13 +665,17 @@ function PrimerContacto({
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Mediana de primer contacto por asesor</h3>
             <p className="mb-2 text-2xs text-muted">
-              Sólo asesores con {MIN_MUESTRA} o más tratos con dato · eje topado en {EJE_MAX_H} h
+              Horas entre la creación del trato y la primera actividad que el asesor le creó · sólo
+              asesores con {MIN_MUESTRA} o más tratos con dato · eje topado en {EJE_MAX_H} h
             </p>
             <MedianaContacto rows={grafico} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Distribución de velocidad por asesor</h3>
-            <p className="mb-2 text-2xs text-muted">% de tratos en cada rango de tiempo de respuesta</p>
+            <p className="mb-2 text-2xs text-muted">
+              % de los tratos que atendió cada asesor, según lo que tardó en crearles la primera
+              actividad
+            </p>
             <DistribucionContacto rows={grafico} />
           </div>
         </div>
@@ -745,8 +754,8 @@ function AccionesDiarias({
           <h3 className="text-xs font-semibold text-dim">Acciones por asesor, día a día</h3>
           <p className="text-2xs text-muted">
             {total.toLocaleString('es-CO')} acciones en {monthLabel(mes)} · toda actividad del CRM
-            (llamada, WhatsApp, correo, reunión, tarea) asignada al asesor, ubicada el día en que se
-            registró · clic en un nombre de la leyenda para aislarlo
+            (llamada, WhatsApp, correo, reunión, tarea) creada por el asesor, ubicada el día en que
+            la registró · clic en un nombre de la leyenda para aislarlo
           </p>
         </div>
         <MonthSelect
@@ -852,8 +861,6 @@ interface PeriodoAcciones {
   hasta: string | null;
   /** Días de lunes a viernes del periodo. Es el divisor del promedio diario. */
   diasHabiles: number;
-  /** Meses del periodo. Es el divisor del promedio mensual. */
-  meses: number;
 }
 
 interface ResumenAcciones {
@@ -930,19 +937,16 @@ function resumenAcciones(
   // Los días se cuentan uno a uno y no por resta de fechas: así los meses
   // excluidos con "Sin …" no inflan el divisor con días que no aportan nada.
   let diasHabiles = 0;
-  const meses = new Set<string>();
   if (desde && hasta && desde <= hasta) {
     for (let t = aFecha(desde).getTime(); t <= aFecha(hasta).getTime(); t += MS_DIA) {
       const d = new Date(t);
-      const mes = d.toISOString().slice(0, 7);
-      if (!mesPermitido(mes)) continue;
-      meses.add(mes);
+      if (!mesPermitido(d.toISOString().slice(0, 7))) continue;
       const dow = d.getUTCDay();
       if (dow >= 1 && dow <= 5) diasHabiles += 1;
     }
   }
 
-  return { porAsesor, total, periodo: { desde, hasta, diasHabiles, meses: meses.size } };
+  return { porAsesor, total, periodo: { desde, hasta, diasHabiles } };
 }
 
 /** `2026-08-03` → `'3 Ago 26'`. */
@@ -986,16 +990,13 @@ function TablaAsesores({
     <div>
       <h3 className="text-xs font-semibold text-dim">Resumen por asesor</h3>
       <p className="mb-3 text-2xs text-muted">
-        Leads por rango de tiempo de primer contacto — los mismos de la gráfica, en número de leads ·
-        Actividades <b>asignadas</b> a cada asesor en Pipedrive, hechas y pendientes, por fecha de
-        creación{' '}
+        Tratos atendidos por cada asesor, en número de tratos y por su rango de respuesta ·
+        Actividades <b>creadas</b> por él en el CRM, hechas y pendientes, contadas el día en que las
+        registró{' '}
         {periodo.desde && periodo.hasta ? (
           <>
             del {fechaCorta(periodo.desde)} al {fechaCorta(periodo.hasta)}, según el filtro del menú
-            principal: <b>{periodo.diasHabiles} días hábiles</b> y{' '}
-            <b>
-              {periodo.meses} {periodo.meses === 1 ? 'mes' : 'meses'}
-            </b>
+            principal: <b>{periodo.diasHabiles} días hábiles</b>
           </>
         ) : (
           'en el filtro actual'
@@ -1028,14 +1029,7 @@ function TablaAsesores({
             cell: (r) => <b>{dec(periodo.diasHabiles ? actividades(r) / periodo.diasHabiles : 0)}</b>,
           },
           {
-            header: 'Actividades / mes',
-            align: 'right',
-            cell: (r) => (
-              <span className="text-dim">{dec(periodo.meses ? actividades(r) / periodo.meses : 0)}</span>
-            ),
-          },
-          {
-            header: 'Total actividades',
+            header: 'Actividades acumuladas',
             align: 'right',
             cell: (r) => num(actividades(r)),
           },

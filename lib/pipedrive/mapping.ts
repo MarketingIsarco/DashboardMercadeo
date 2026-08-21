@@ -110,8 +110,15 @@ function parseTs(value: string | null | undefined): number {
   return value ? Date.parse(value.replace(' ', 'T')) : NaN;
 }
 
+/** La primera actividad de un trato: cuándo se creó y quién la creó. */
+interface PrimeraActividad {
+  ts: number;
+  /** `created_by_user_id`, con respaldo en el asignado si no viene. */
+  creador: number | null;
+}
+
 /**
- * `deal_id` → instante de su actividad más antigua.
+ * `deal_id` → su actividad más antigua.
  *
  * Se ordena por `add_time` ("Hora de añadición"), no por
  * `marked_as_done_time`: lo que se quiere medir es cuándo el asesor dejó
@@ -119,9 +126,12 @@ function parseTs(value: string | null | undefined): number {
  * cosmética — sobre el histórico completo mueve la mediana global de ~45 h
  * a ~24 h, porque muchas llamadas se registran al momento y se marcan como
  * completadas mucho después.
+ *
+ * Se guarda también el creador porque el tiempo de primer contacto se le
+ * acredita a **quien atendió el lead**, que no siempre es su dueño.
  */
-function firstActivityByDeal(activities: PipedriveActivity[]): Map<number, number> {
-  const first = new Map<number, number>();
+function firstActivityByDeal(activities: PipedriveActivity[]): Map<number, PrimeraActividad> {
+  const first = new Map<number, PrimeraActividad>();
 
   for (const a of activities) {
     if (!a.deal_id) continue;
@@ -129,7 +139,9 @@ function firstActivityByDeal(activities: PipedriveActivity[]): Map<number, numbe
     if (Number.isNaN(t)) continue;
 
     const prev = first.get(a.deal_id);
-    if (prev === undefined || t < prev) first.set(a.deal_id, t);
+    if (prev === undefined || t < prev.ts) {
+      first.set(a.deal_id, { ts: t, creador: a.created_by_user_id ?? a.user_id });
+    }
   }
   return first;
 }
@@ -235,9 +247,11 @@ function labelIdsOf(deal: PipedriveDeal): string[] {
  * marcada como completada castigaría a quien agenda bien pero no vuelve a
  * marcar la casilla, que es la mitad del CRM.
  *
- * El asesor sale de `user_id` —a quién está asignada—, no del dueño del trato.
- * Atribuir por dueño le cargaba a cada asesor todo lo que otros o las
- * automatizaciones hacían sobre sus leads, y el total no cuadraba con el CRM.
+ * El asesor sale de `created_by_user_id` —**quien creó** la actividad—, no del
+ * dueño del trato ni de a quién quedó asignada. Lo que se mide es quién dejó
+ * constancia de la gestión: atribuir por dueño le cargaba a cada asesor todo lo
+ * que otros hacían sobre sus leads, y atribuir por asignado le acredita tareas
+ * que le repartieron pero que no ejecutó él.
  *
  * La fecha es `add_time`, **cuándo se creó la actividad**: el día en que el
  * asesor dejó constancia de la gestión. Viene en UTC, así que se pasa a hora de
@@ -261,7 +275,7 @@ function buildActivityDays(
     const date = a.add_time ? aBogota(a.add_time) : a.due_date;
     if (!date) continue;
 
-    const advisor = advisorDeUsuario(a.user_id);
+    const advisor = advisorDeUsuario(a.created_by_user_id ?? a.user_id);
     const key = `${a.deal_id}|${advisor}|${date}`;
     const prev = porClave.get(key);
 
@@ -334,6 +348,16 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const lossReasons: string[] = [];
   const lossReasonIdx = new Map<string, number>();
 
+  // El usuario de una actividad entra a la MISMA lista de asesores que los
+  // dueños de trato, emparejando por nombre: así "Damariz Montero" es el mismo
+  // índice venga de un deal o de una actividad. Se define antes del recorrido
+  // de tratos porque el primer contacto se acredita al creador de la actividad.
+  const userName = new Map<number, string>(
+    users.map((u) => [u.id, u.name?.trim() || `Usuario ${u.id}`]),
+  );
+  const advisorDeUsuario = (userId: number | null | undefined) =>
+    intern(advisors, advisorIdx, (userId != null && userName.get(userId)) || 'Sin asignar');
+
   const now = Date.now();
   const leads: Lead[] = [];
   const sales: SaleDeal[] = [];
@@ -384,6 +408,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
     const name = deal.person_name?.trim() || deal.title?.trim() || 'Sin nombre';
     const phone = phoneOf(deal);
+    const primera = firstActivity.get(deal.id);
 
     leads.push({
       id: deal.id,
@@ -408,7 +433,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
       lastActivity: dateOnly(deal.last_activity_date),
       name,
       phone,
-      firstContactHours: firstContactHours(deal, firstActivity.get(deal.id)),
+      firstContactHours: firstContactHours(deal, primera?.ts),
+      firstContactBy: primera ? advisorDeUsuario(primera.creador) : -1,
     });
 
     // Una separación abierta ya es una venta comprometida, aunque el CRM
@@ -436,17 +462,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     .filter((i) => i >= 0);
 
   const dealIds = new Set(leads.map((l) => l.id));
-
-  // El usuario de una actividad entra a la MISMA lista de asesores que los
-  // dueños de trato, emparejando por nombre: así "Damariz Montero" es el mismo
-  // índice venga de un deal o de una actividad. Quien registra gestión sin ser
-  // dueño de ningún trato se agrega al final de la lista, y por eso esto va
-  // después del recorrido de deals.
-  const userName = new Map<number, string>(
-    users.map((u) => [u.id, u.name?.trim() || `Usuario ${u.id}`]),
-  );
-  const advisorDeUsuario = (userId: number | null) =>
-    intern(advisors, advisorIdx, (userId !== null && userName.get(userId)) || 'Sin asignar');
 
   const activityDays = buildActivityDays(activities, dealIds, advisorDeUsuario);
 
