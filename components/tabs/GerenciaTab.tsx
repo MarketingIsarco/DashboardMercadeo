@@ -745,8 +745,8 @@ function AccionesDiarias({
           <h3 className="text-xs font-semibold text-dim">Acciones por asesor, día a día</h3>
           <p className="text-2xs text-muted">
             {total.toLocaleString('es-CO')} acciones en {monthLabel(mes)} · toda actividad del CRM
-            (llamada, WhatsApp, correo, reunión, tarea) asignada al asesor, ubicada el día para el
-            que quedó agendada · clic en un nombre de la leyenda para aislarlo
+            (llamada, WhatsApp, correo, reunión, tarea) asignada al asesor, ubicada el día en que se
+            registró · clic en un nombre de la leyenda para aislarlo
           </p>
         </div>
         <MonthSelect
@@ -827,8 +827,8 @@ function AccionesDiarias({
 //
 // Al contrario del gráfico de acciones día a día (que elige el mes con su
 // propio selector), esta tabla **sí respeta los filtros de tiempo del menú
-// principal**, y los aplica a la fecha en que se registró la actividad, no a la
-// del lead: "julio" aquí es lo que el equipo gestionó en julio, aunque el trato
+// principal**, y los aplica a la fecha en que se creó la actividad, no a la del
+// lead: "julio" aquí es lo que el equipo gestionó en julio, aunque el trato
 // haya entrado en marzo. Los demás filtros (proyecto, unidad, fuente, campaña,
 // estado) sí son propiedades del trato y se resuelven cruzando por `dealId`.
 // ─────────────────────────────────────────────────────────────────────
@@ -988,7 +988,7 @@ function TablaAsesores({
       <p className="mb-3 text-2xs text-muted">
         Leads por rango de tiempo de primer contacto — los mismos de la gráfica, en número de leads ·
         Actividades <b>asignadas</b> a cada asesor en Pipedrive, hechas y pendientes, por fecha de
-        vencimiento{' '}
+        creación{' '}
         {periodo.desde && periodo.hasta ? (
           <>
             del {fechaCorta(periodo.desde)} al {fechaCorta(periodo.hasta)}, según el filtro del menú

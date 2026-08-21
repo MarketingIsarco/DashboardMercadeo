@@ -138,18 +138,17 @@ export interface Meeting {
  * del trato le cargaba a un asesor toda la gestión que otros —o una
  * automatización— hacían sobre sus leads, y el número no cuadraba con el CRM.
  *
- * La fecha es la **de vencimiento** (`due_date`): el día para el que la
- * actividad quedó agendada. Es el criterio por el que filtra Pipedrive en sus
- * propios reportes y el que ya usaba el mapa de calor de reuniones, así que las
- * cifras se pueden auditar contra el CRM sin traducciones. Se cuentan las
- * actividades hechas **y** las pendientes: crear la actividad ya es gestión.
+ * La fecha es la **de creación** (`add_time`), ya convertida a hora de Bogotá:
+ * el día en que el asesor dejó constancia de la gestión, no aquel para el que
+ * la agendó. Se cuentan las actividades hechas **y** las pendientes: crear la
+ * actividad ya es gestión.
  */
 export interface ActivityDay {
   /** Coincide con `Lead.id`: es la llave para aplicarle los filtros globales. */
   dealId: number;
   /** Índice en `Meta.advisors` del usuario asignado a la actividad. */
   advisor: number;
-  /** `YYYY-MM-DD` para el que quedó agendada la actividad. */
+  /** `YYYY-MM-DD` en que se creó la actividad, en hora de Bogotá. */
   date: string;
   /** Cuántas actividades de ese asesor cayeron en ese trato y ese día. */
   count: number;

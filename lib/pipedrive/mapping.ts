@@ -239,11 +239,11 @@ function labelIdsOf(deal: PipedriveDeal): string[] {
  * Atribuir por dueño le cargaba a cada asesor todo lo que otros o las
  * automatizaciones hacían sobre sus leads, y el total no cuadraba con el CRM.
  *
- * La fecha es `due_date`, el día para el que quedó agendada, que es por el que
- * filtra Pipedrive. Cuando falta —dato viejo o mal migrado— se cae a la fecha
- * de creación para no perder la actividad, y ahí sí se corta la hora a Bogotá:
- * `add_time` viene en UTC y sin corregir todo lo registrado después de las
- * 7:00 p. m. se contaba al día siguiente.
+ * La fecha es `add_time`, **cuándo se creó la actividad**: el día en que el
+ * asesor dejó constancia de la gestión. Viene en UTC, así que se pasa a hora de
+ * Bogotá antes de cortarla; sin eso, todo lo registrado después de las 7:00
+ * p. m. se contaba al día siguiente. Cuando falta —dato viejo o mal migrado— se
+ * cae a la fecha de vencimiento para no perder la actividad.
  *
  * `dealIds` deja fuera las actividades sueltas y las de pipelines no mapeados:
  * sin trato no hay filtro global que aplicarles.
@@ -258,7 +258,7 @@ function buildActivityDays(
   for (const a of activities) {
     if (!a.deal_id || !dealIds.has(a.deal_id)) continue;
 
-    const date = a.due_date ?? (a.add_time ? aBogota(a.add_time) : null);
+    const date = a.add_time ? aBogota(a.add_time) : a.due_date;
     if (!date) continue;
 
     const advisor = advisorDeUsuario(a.user_id);
