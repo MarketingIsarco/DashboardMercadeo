@@ -859,8 +859,8 @@ function ultimoDiaDelMes(mes: string): string {
 interface PeriodoAcciones {
   desde: string | null;
   hasta: string | null;
-  /** Días de lunes a viernes del periodo. Es el divisor del promedio diario. */
-  diasHabiles: number;
+  /** Días calendario del periodo. Es el divisor del promedio diario. */
+  dias: number;
 }
 
 interface ResumenAcciones {
@@ -934,19 +934,18 @@ function resumenAcciones(
   const desde = rango.desde ?? primera;
   const hasta = rango.hasta ?? ultima;
 
-  // Los días se cuentan uno a uno y no por resta de fechas: así los meses
-  // excluidos con "Sin …" no inflan el divisor con días que no aportan nada.
-  let diasHabiles = 0;
+  // Días calendario, sábados y domingos incluidos: el equipo comercial atiende
+  // fines de semana, y descontarlos inflaba el promedio de quien gestiona
+  // justo esos días. Se cuentan uno a uno y no por resta de fechas, para que
+  // los meses excluidos con "Sin …" no metan días que no aportan nada.
+  let dias = 0;
   if (desde && hasta && desde <= hasta) {
     for (let t = aFecha(desde).getTime(); t <= aFecha(hasta).getTime(); t += MS_DIA) {
-      const d = new Date(t);
-      if (!mesPermitido(d.toISOString().slice(0, 7))) continue;
-      const dow = d.getUTCDay();
-      if (dow >= 1 && dow <= 5) diasHabiles += 1;
+      if (mesPermitido(new Date(t).toISOString().slice(0, 7))) dias += 1;
     }
   }
 
-  return { porAsesor, total, periodo: { desde, hasta, diasHabiles } };
+  return { porAsesor, total, periodo: { desde, hasta, dias } };
 }
 
 /** `2026-08-03` → `'3 Ago 26'`. */
@@ -996,7 +995,7 @@ function TablaAsesores({
         {periodo.desde && periodo.hasta ? (
           <>
             del {fechaCorta(periodo.desde)} al {fechaCorta(periodo.hasta)}, según el filtro del menú
-            principal: <b>{periodo.diasHabiles} días hábiles</b>
+            principal: <b>{periodo.dias} días</b>
           </>
         ) : (
           'en el filtro actual'
@@ -1024,9 +1023,9 @@ function TablaAsesores({
               ),
           })),
           {
-            header: 'Actividades / día hábil',
+            header: 'Actividades / día',
             align: 'right',
-            cell: (r) => <b>{dec(periodo.diasHabiles ? actividades(r) / periodo.diasHabiles : 0)}</b>,
+            cell: (r) => <b>{dec(periodo.dias ? actividades(r) / periodo.dias : 0)}</b>,
           },
           {
             header: 'Actividades acumuladas',
