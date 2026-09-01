@@ -18,16 +18,19 @@ import {
   LOSS_GROUP_LABEL,
   META_ADS_SOURCES,
   NO_DIGITAL_COLOR,
+  OUTBOUND_EXCLUDED_LABELS,
   PAID_SOURCES,
   RUBROS,
+  SIN_ETIQUETA,
   SIN_MOTIVO,
   SIN_MOTIVO_COLOR,
   SOURCE_COLORS,
   SOURCE_FALLBACK,
   STAGES,
+  STAGE_SEPARACION,
 } from '@/lib/config/negocio';
 import type { Bolsa } from '@/lib/config/negocio';
-import { fmtCOP, monthLabel, pct, sourceIndices } from '@/lib/format';
+import { fmtCOP, monthLabel, normalize, pct, sourceIndices } from '@/lib/format';
 import {
   bolsasActivas,
   matrizRubros,
@@ -81,10 +84,6 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
           <Timeline leads={filtered} period={filters.period} goal={goal} />
         </div>
         <div className="mt-6">
-          <h3 className="mb-2 text-xs font-semibold text-dim">Estado por etapa (Abierto / Perdido / Ganado)</h3>
-          <StageStatus leads={filtered} />
-        </div>
-        <div className="mt-6">
           <h3 className="mb-2 text-xs font-semibold text-dim">Comparativo mensual</h3>
           <Comparativo leads={filtered} period={filters.period} />
         </div>
@@ -134,6 +133,14 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         sub="Presupuesto P&G clasificado en Digital / No-Digital · según los filtros activos"
       >
         <Inversion filtered={filtered} filters={filters} meta={meta} />
+      </Section>
+
+      {/* 06 · Campañas Outbound */}
+      <Section
+        title="06 · Campañas Outbound"
+        sub="Efectividad de las campañas de reactivación y recuperación, por etiqueta del trato"
+      >
+        <Outbound leads={filtered} labels={meta.labels} />
       </Section>
     </>
   );
@@ -185,7 +192,7 @@ function KpiSection({
       title="01 · Indicadores Generales"
       sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
     >
-      <KpiGrid>
+      <KpiGrid cols={6}>
         <Kpi
           label="Leads"
           value={k.total.toLocaleString('es-CO')}
@@ -196,32 +203,39 @@ function KpiSection({
         <Kpi
           label="Citas+"
           value={k.citas}
-          meta={`Meta: ${goal ? goal.citas : 'N/A'}/mes`}
+          meta={`${pct(k.citas, k.total)}% de leads`}
+          sub={`Meta: ${goal ? goal.citas : 'N/A'}/mes`}
           delta={prevK ? delta(k.citas, prevK.citas) : null}
           deltaSuffix=""
         />
         <Kpi
           label="Visitas"
           value={k.visitas}
-          meta={`Meta: ${goal ? goal.visitas : 'N/A'}/mes`}
+          meta={`${pct(k.visitas, k.total)}% de leads`}
+          sub={`Meta: ${goal ? goal.visitas : 'N/A'}/mes`}
           delta={prevK ? delta(k.visitas, prevK.visitas) : null}
           deltaSuffix=""
         />
         {/* La separación es el paso previo al cierre, así que comparte su meta. */}
-        <Kpi label="Separación" value={k.separaciones} meta={`Meta: ${goal ? goal.cierres : 'N/A'}/mes`} />
+        <Kpi
+          label="Separación"
+          value={k.separaciones}
+          meta={`${pct(k.separaciones, k.total)}% de leads`}
+          sub={`Meta: ${goal ? goal.cierres : 'N/A'}/mes`}
+        />
         <Kpi
           label="Cierres"
           value={k.ganados}
-          meta={`Meta: ${goal ? goal.cierres : 'N/A'}/mes`}
+          meta={`${pct(k.ganados, k.total)}% de leads`}
+          sub={`Meta: ${goal ? goal.cierres : 'N/A'}/mes`}
           delta={prevK ? delta(k.ganados, prevK.ganados) : null}
           deltaSuffix=""
         />
-        <Kpi label="Perdidos" value={k.perdidos} meta={`${pct(k.perdidos, k.total)}% del total`} />
         <Kpi
-          label="Proyección Cierres"
-          value={k.cierresProyectados}
-          meta={`${k.enNegociacion} neg. + ${k.enSeparacion} sep.`}
-          sub="Próximos 30–60 días · Neg.×30% + Sep.×70%"
+          label="Perdidos"
+          value={k.perdidos}
+          meta={`${pct(k.perdidos, k.total)}% de leads`}
+          sub={`${k.abiertos.toLocaleString('es-CO')} siguen abiertos`}
         />
       </KpiGrid>
     </Section>
@@ -237,13 +251,38 @@ function PipelineVivo({ leads }: { leads: Lead[] }) {
   const ganado = STAGES.map((_, i) => leads.filter((l) => l.stage === i && l.status === STATUS_WON).length);
   const totals = STAGES.map((_, i) => abierto[i] + perdido[i] + ganado[i]);
 
-  const rows = STAGES.map((s, i) => ({
-    stage: s,
-    abierto: abierto[i],
-    perdido: perdido[i],
-    ganado: ganado[i],
-    total: totals[i],
-  }));
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+  // La fila de totales va como una fila más y se pinta distinto: así el
+  // encabezado sigue alineado y la tabla no necesita un pie aparte.
+  const rows: Array<{
+    stage: string;
+    abierto: number;
+    perdido: number;
+    ganado: number;
+    total: number;
+    esTotal?: boolean;
+  }> = [
+    ...STAGES.map((s, i) => ({
+      stage: s,
+      abierto: abierto[i],
+      perdido: perdido[i],
+      ganado: ganado[i],
+      total: totals[i],
+    })),
+    {
+      stage: 'TOTAL',
+      abierto: sum(abierto),
+      perdido: sum(perdido),
+      ganado: sum(ganado),
+      total: sum(totals),
+      esTotal: true,
+    },
+  ];
+
+  /** Celda numérica: en la fila de totales va en negrita. */
+  const num = (v: number, esTotal?: boolean) =>
+    esTotal ? <b className="text-text">{v.toLocaleString('es-CO')}</b> : v.toLocaleString('es-CO');
 
   return (
     <div>
@@ -272,11 +311,16 @@ function PipelineVivo({ leads }: { leads: Lead[] }) {
         <DataTable
           rows={rows}
           columns={[
-            { header: 'Etapa', cell: (r) => <b>{r.stage}</b> },
-            { header: 'Abierto', cell: (r) => r.abierto, align: 'right' },
-            { header: 'Perdido', cell: (r) => r.perdido, align: 'right' },
-            { header: 'Ganado', cell: (r) => r.ganado, align: 'right' },
-            { header: 'Total', cell: (r) => r.total, align: 'right' },
+            {
+              header: 'Etapa',
+              cell: (r) => (
+                <b className={r.esTotal ? 'uppercase tracking-wide text-accent' : undefined}>{r.stage}</b>
+              ),
+            },
+            { header: 'Abierto', cell: (r) => num(r.abierto, r.esTotal), align: 'right' },
+            { header: 'Perdido', cell: (r) => num(r.perdido, r.esTotal), align: 'right' },
+            { header: 'Ganado', cell: (r) => num(r.ganado, r.esTotal), align: 'right' },
+            { header: 'Total', cell: (r) => num(r.total, r.esTotal), align: 'right' },
           ]}
         />
       </div>
@@ -431,31 +475,145 @@ function Timeline({
   );
 }
 
-function StageStatus({ leads }: { leads: Lead[] }) {
-  const abierto = STAGES.map((_, i) => leads.filter((l) => l.stage === i && l.status === STATUS_OPEN).length);
-  const perdido = STAGES.map((_, i) => leads.filter((l) => l.stage === i && l.status === STATUS_LOST).length);
-  const ganado = STAGES.map((_, i) => leads.filter((l) => l.stage === i && l.status === STATUS_WON).length);
+// ─────────────────────────────────────────────────────────────────────
+// 06 · Campañas Outbound
+// ─────────────────────────────────────────────────────────────────────
+
+interface CampanaOutbound {
+  nombre: string;
+  leads: number;
+  porEtapa: number[];
+  citas: number;
+  visitas: number;
+  separaciones: number;
+  abiertos: number;
+  perdidos: number;
+  ganados: number;
+}
+
+/** Métricas de un grupo de leads, para una campaña o para el total. */
+function resumirOutbound(nombre: string, ls: Lead[]): CampanaOutbound {
+  return {
+    nombre,
+    leads: ls.length,
+    porEtapa: STAGES.map((_, i) => ls.filter((l) => l.stage === i).length),
+    citas: ls.filter(isCita).length,
+    visitas: ls.filter(isVisita).length,
+    separaciones: ls.filter((l) => l.stage >= STAGE_SEPARACION).length,
+    abiertos: ls.filter((l) => l.status === STATUS_OPEN).length,
+    perdidos: ls.filter(isPerdido).length,
+    ganados: ls.filter(isGanado).length,
+  };
+}
+
+/**
+ * Campañas de reactivación y recuperación, leídas de la etiqueta del trato.
+ *
+ * Cada etiqueta del CRM es una campaña, salvo las de `OUTBOUND_EXCLUDED_LABELS`
+ * (estado comercial, no campaña) y los tratos sin etiquetar, que nunca fueron
+ * impactados.
+ *
+ * El total es de leads **únicos**, no la suma de las filas: Pipedrive admite
+ * varias etiquetas por trato, así que un lead reactivado dos veces aparece en
+ * las dos campañas y sumar las columnas lo contaría doble.
+ */
+function Outbound({ leads, labels }: { leads: Lead[]; labels: string[] }) {
+  const { campanas, total } = useMemo(() => {
+    const excluidas = new Set([...OUTBOUND_EXCLUDED_LABELS, SIN_ETIQUETA].map(normalize));
+    const idxOutbound = labels
+      .map((nombre, i) => ({ nombre, i }))
+      .filter(({ nombre }) => !excluidas.has(normalize(nombre)));
+
+    const cs = idxOutbound
+      .map(({ nombre, i }) => resumirOutbound(nombre, leads.filter((l) => l.labels.includes(i))))
+      .filter((c) => c.leads > 0)
+      .sort((a, b) => b.leads - a.leads);
+
+    const idsOutbound = new Set(idxOutbound.map(({ i }) => i));
+    const unicos = leads.filter((l) => l.labels.some((i) => idsOutbound.has(i)));
+
+    return { campanas: cs, total: resumirOutbound('TOTAL', unicos) };
+  }, [leads, labels]);
+
+  if (campanas.length === 0) {
+    return (
+      <p className="text-xs text-muted">
+        Ninguna campaña outbound en el filtro actual. Se excluyen{' '}
+        {OUTBOUND_EXCLUDED_LABELS.map((l) => `"${l}"`).join(', ')} y los tratos sin etiqueta.
+      </p>
+    );
+  }
+
+  const filas: Array<CampanaOutbound & { esTotal?: boolean }> = [
+    ...campanas,
+    { ...total, esTotal: true },
+  ];
+
+  const num = (v: number, esTotal?: boolean) =>
+    esTotal ? <b className="text-text">{v.toLocaleString('es-CO')}</b> : v.toLocaleString('es-CO');
+
+  const tasa = (a: number, b: number, esTotal?: boolean) => {
+    const t = `${pct(a, b)}%`;
+    return esTotal ? <b className="text-text">{t}</b> : t;
+  };
 
   return (
-    <ChartBox height={260}>
-      <Bar
-        data={{
-          labels: [...STAGES],
-          datasets: [
-            { label: 'Abierto', data: abierto, backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 1 },
-            { label: 'Perdido', data: perdido, backgroundColor: '#f43f5e44', borderColor: '#f43f5e', borderWidth: 1 },
-            { label: 'Ganado', data: ganado, backgroundColor: '#4ade8044', borderColor: '#4ade80', borderWidth: 1 },
-          ],
-        }}
-        options={{
-          plugins: { legend: legendBottom, tooltip: { mode: 'index' } },
-          scales: {
-            x: { stacked: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
-            y: { stacked: true, beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
-          },
-        }}
-      />
-    </ChartBox>
+    <div>
+      <h3 className="mb-2 text-xs font-semibold text-dim">Leads por campaña y etapa alcanzada</h3>
+      {/* Alto proporcional al número de campañas: una barra fija aplasta las
+          barras cuando hay muchas y las estira cuando hay dos. */}
+      <ChartBox height={Math.max(180, 62 + campanas.length * 34)}>
+        <Bar
+          data={{
+            labels: campanas.map((c) => c.nombre),
+            datasets: STAGES.map((s, i) => ({
+              label: s,
+              data: campanas.map((c) => c.porEtapa[i]),
+              backgroundColor: `${STAGE_COLORS[i]}bb`,
+              borderColor: STAGE_COLORS[i],
+              borderWidth: 1,
+            })),
+          }}
+          options={{
+            indexAxis: 'y',
+            plugins: { legend: legendBottom, tooltip: { mode: 'index' } },
+            scales: {
+              x: { stacked: true, beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+              y: { stacked: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+            },
+          }}
+        />
+      </ChartBox>
+
+      <div className="mt-4">
+        <h3 className="mb-2 text-xs font-semibold text-dim">Efectividad por campaña</h3>
+        <p className="mb-2 text-2xs text-muted">
+          Cita+, Visita+ y Separación+ son acumulados: cuentan los leads que alcanzaron esa etapa o
+          la superaron. El TOTAL son leads únicos, así que puede ser menor que la suma de las filas
+          si un lead entró en dos campañas.
+        </p>
+        <DataTable
+          rows={filas}
+          columns={[
+            {
+              header: 'Campaña',
+              cell: (r) => (
+                <b className={r.esTotal ? 'uppercase tracking-wide text-accent' : undefined}>{r.nombre}</b>
+              ),
+            },
+            { header: 'Leads', cell: (r) => num(r.leads, r.esTotal), align: 'right' },
+            { header: 'Cita+', cell: (r) => num(r.citas, r.esTotal), align: 'right' },
+            { header: 'Visita+', cell: (r) => num(r.visitas, r.esTotal), align: 'right' },
+            { header: 'Separación+', cell: (r) => num(r.separaciones, r.esTotal), align: 'right' },
+            { header: 'Abierto', cell: (r) => num(r.abiertos, r.esTotal), align: 'right' },
+            { header: 'Perdido', cell: (r) => num(r.perdidos, r.esTotal), align: 'right' },
+            { header: 'Ganado', cell: (r) => num(r.ganados, r.esTotal), align: 'right' },
+            { header: '% Cita', cell: (r) => tasa(r.citas, r.leads, r.esTotal), align: 'right' },
+            { header: '% Cierre', cell: (r) => tasa(r.ganados, r.leads, r.esTotal), align: 'right' },
+          ]}
+        />
+      </div>
+    </div>
   );
 }
 

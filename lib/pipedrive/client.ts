@@ -7,6 +7,13 @@ export const FIELD = {
   FUENTE: process.env.PD_FIELD_FUENTE || '8252f665606371cf4dab874759f75532d701ce39',
   CAMPANA: process.env.PD_FIELD_CAMPANA || '2b76897628971d69dabd60201bd33029c02c0bda',
   CONTENIDO: process.env.PD_FIELD_CONTENIDO || '612f3a3498c726eab5fed9709467a322045c1cba',
+  /**
+   * "Trato - Etiqueta" es un campo **nativo** de Pipedrive, no personalizado:
+   * su clave es literalmente `label`, no un hash. Se deja sobreescribible por
+   * si algún día la etiqueta que le importa al negocio pasa a ser un campo
+   * propio.
+   */
+  ETIQUETA: process.env.PD_FIELD_ETIQUETA || 'label',
 } as const;
 
 export interface PipedriveDeal {
@@ -24,6 +31,16 @@ export interface PipedriveDeal {
   stage_id: number;
   pipeline_id: number;
   lost_reason: string | null;
+  /**
+   * Etiqueta del trato, como **id de opción** (no como texto).
+   *
+   * Pipedrive la expone de dos formas según cómo esté configurada la cuenta:
+   * `label` cuando admite una sola etiqueta —y ahí puede llegar más de un id
+   * separado por coma— y `label_ids` cuando admite varias. Leer sólo una de
+   * las dos deja tratos etiquetados apareciendo como "Sin etiqueta".
+   */
+  label?: string | number | null;
+  label_ids?: Array<string | number> | null;
   owner_name: string | null;
   person_name: string | null;
   person_id: { value: number; name?: string; phone?: Array<{ value: string }> } | number | null;
@@ -34,6 +51,18 @@ export interface PipedriveActivity {
   id: number;
   /** `null` en actividades sueltas, no atadas a ningún trato. */
   deal_id: number | null;
+  /**
+   * Quien **creó** la actividad. Es la definición de "gestión del asesor" que
+   * usa el dashboard: mide quién levantó el teléfono y dejó constancia, no a
+   * quién le quedó la tarea pendiente.
+   */
+  created_by_user_id: number | null;
+  /**
+   * Usuario al que está **asignada**. Sólo se usa como respaldo cuando el
+   * creador no viene. No es lo mismo: una tarea puede asignarse a un asesor
+   * y haberla creado otro, o una automatización.
+   */
+  user_id: number | null;
   /** `YYYY-MM-DD HH:MM:SS` — "Hora de añadición": cuándo se registró en el CRM. */
   add_time: string | null;
   /** `YYYY-MM-DD HH:MM:SS` — cuándo se marcó como completada, o `null`. */
@@ -153,7 +182,10 @@ export async function fetchAllDeals(base: string): Promise<PipedriveDeal[]> {
  * esto corre 4 veces por hora como máximo.
  */
 export async function fetchAllActivities(base: string): Promise<PipedriveActivity[]> {
-  const all: PipedriveActivity[] = [];
+  // Se deduplica por id: el barrido dura ~60 requests y si alguien crea o
+  // borra una actividad a mitad de la paginación, Pipedrive puede devolver la
+  // misma fila en dos páginas. Sin esto, esa actividad se contaría dos veces.
+  const porId = new Map<number, PipedriveActivity>();
   let start = 0;
   const limit = 500;
 
@@ -169,11 +201,25 @@ export async function fetchAllActivities(base: string): Promise<PipedriveActivit
       start,
     });
     if (!Array.isArray(json.data)) break;
-    all.push(...json.data);
+    for (const a of json.data) porId.set(a.id, a);
     if (!json.additional_data?.pagination?.more_items_in_collection) break;
     start += limit;
   }
-  return all;
+  return [...porId.values()];
+}
+
+export interface PipedriveUser {
+  id: number;
+  name: string | null;
+}
+
+/**
+ * Los usuarios de la cuenta, para poder ponerle nombre al `user_id` de cada
+ * actividad. Es una sola request: la cuenta tiene decenas de usuarios, no miles.
+ */
+export async function fetchUsers(base: string): Promise<PipedriveUser[]> {
+  const json = await request<PipedriveUser[]>(base, '/users');
+  return json.data ?? [];
 }
 
 export async function fetchStages(base: string): Promise<PipedriveStage[]> {

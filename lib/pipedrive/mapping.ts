@@ -9,6 +9,7 @@ import {
   PIPELINE_TO_PROJECT,
   PROJECTS,
   RECOVERABLE_RULES,
+  SIN_ETIQUETA,
   STAGES,
   STAGE_SEPARACION,
   STAGE_TO_IDX,
@@ -22,6 +23,7 @@ import {
   STATUS_WON,
 } from '@/lib/types';
 import type {
+  ActivityDay,
   ContentType,
   DashboardData,
   Lead,
@@ -39,6 +41,7 @@ import {
   fetchDealFields,
   fetchPipelines,
   fetchStages,
+  fetchUsers,
   resolveBase,
 } from './client';
 import type { PipedriveActivity, PipedriveDeal } from './client';
@@ -107,8 +110,15 @@ function parseTs(value: string | null | undefined): number {
   return value ? Date.parse(value.replace(' ', 'T')) : NaN;
 }
 
+/** La primera actividad de un trato: cuándo se creó y quién la creó. */
+interface PrimeraActividad {
+  ts: number;
+  /** `created_by_user_id`, con respaldo en el asignado si no viene. */
+  creador: number | null;
+}
+
 /**
- * `deal_id` → instante de su actividad más antigua.
+ * `deal_id` → su actividad más antigua.
  *
  * Se ordena por `add_time` ("Hora de añadición"), no por
  * `marked_as_done_time`: lo que se quiere medir es cuándo el asesor dejó
@@ -116,9 +126,12 @@ function parseTs(value: string | null | undefined): number {
  * cosmética — sobre el histórico completo mueve la mediana global de ~45 h
  * a ~24 h, porque muchas llamadas se registran al momento y se marcan como
  * completadas mucho después.
+ *
+ * Se guarda también el creador porque el tiempo de primer contacto se le
+ * acredita a **quien atendió el lead**, que no siempre es su dueño.
  */
-function firstActivityByDeal(activities: PipedriveActivity[]): Map<number, number> {
-  const first = new Map<number, number>();
+function firstActivityByDeal(activities: PipedriveActivity[]): Map<number, PrimeraActividad> {
+  const first = new Map<number, PrimeraActividad>();
 
   for (const a of activities) {
     if (!a.deal_id) continue;
@@ -126,7 +139,9 @@ function firstActivityByDeal(activities: PipedriveActivity[]): Map<number, numbe
     if (Number.isNaN(t)) continue;
 
     const prev = first.get(a.deal_id);
-    if (prev === undefined || t < prev) first.set(a.deal_id, t);
+    if (prev === undefined || t < prev.ts) {
+      first.set(a.deal_id, { ts: t, creador: a.created_by_user_id ?? a.user_id });
+    }
   }
   return first;
 }
@@ -203,6 +218,81 @@ function buildMeetings(activities: PipedriveActivity[], dealIds: Set<number>): M
   return out;
 }
 
+/**
+ * Ids de etiqueta de un trato, unificando las dos formas en que Pipedrive los
+ * manda (`label_ids` y `label`).
+ *
+ * Se unen en vez de elegir una: las cuentas que migraron a etiquetas múltiples
+ * siguen respondiendo el campo viejo, y no hay garantía de que ambos coincidan.
+ */
+function labelIdsOf(deal: PipedriveDeal): string[] {
+  const out: string[] = [];
+
+  const push = (raw: unknown) => {
+    const id = String(raw ?? '').trim();
+    if (id && !out.includes(id)) out.push(id);
+  };
+
+  if (Array.isArray(deal.label_ids)) deal.label_ids.forEach(push);
+  if (deal.label != null && deal.label !== '') String(deal.label).split(',').forEach(push);
+
+  return out;
+}
+
+/**
+ * Actividades agrupadas por trato, asesor y día.
+ *
+ * Cuenta **toda** actividad —llamada, WhatsApp, correo, reunión, tarea—, hecha
+ * o pendiente: crear la actividad ya es gestión del asesor, y exigir que esté
+ * marcada como completada castigaría a quien agenda bien pero no vuelve a
+ * marcar la casilla, que es la mitad del CRM.
+ *
+ * El asesor sale de `created_by_user_id` —**quien creó** la actividad—, no del
+ * dueño del trato ni de a quién quedó asignada. Lo que se mide es quién dejó
+ * constancia de la gestión: atribuir por dueño le cargaba a cada asesor todo lo
+ * que otros hacían sobre sus leads, y atribuir por asignado le acredita tareas
+ * que le repartieron pero que no ejecutó él.
+ *
+ * La fecha es `add_time`, **cuándo se creó la actividad**: el día en que el
+ * asesor dejó constancia de la gestión. Viene en UTC, así que se pasa a hora de
+ * Bogotá antes de cortarla; sin eso, todo lo registrado después de las 7:00
+ * p. m. se contaba al día siguiente. Cuando falta —dato viejo o mal migrado— se
+ * cae a la fecha de vencimiento para no perder la actividad.
+ *
+ * `dealIds` deja fuera las actividades sueltas y las de pipelines no mapeados:
+ * sin trato no hay filtro global que aplicarles.
+ */
+function buildActivityDays(
+  activities: PipedriveActivity[],
+  dealIds: Set<number>,
+  advisorDeUsuario: (userId: number | null) => number,
+): ActivityDay[] {
+  const porClave = new Map<string, ActivityDay>();
+
+  for (const a of activities) {
+    if (!a.deal_id || !dealIds.has(a.deal_id)) continue;
+
+    const date = a.add_time ? aBogota(a.add_time) : a.due_date;
+    if (!date) continue;
+
+    const advisor = advisorDeUsuario(a.created_by_user_id ?? a.user_id);
+    const key = `${a.deal_id}|${advisor}|${date}`;
+    const prev = porClave.get(key);
+
+    if (prev) prev.count += 1;
+    else porClave.set(key, { dealId: a.deal_id, advisor, date, count: 1 });
+  }
+
+  return [...porClave.values()];
+}
+
+/** `YYYY-MM-DD HH:MM:SS` en UTC → el `YYYY-MM-DD` que era en Bogotá (UTC−5). */
+function aBogota(utc: string): string {
+  const t = Date.parse(`${utc.replace(' ', 'T')}Z`);
+  if (Number.isNaN(t)) return utc.slice(0, 10);
+  return new Date(t - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function phoneOf(deal: PipedriveDeal): string {
   const p = deal.person_id;
   if (p && typeof p === 'object' && Array.isArray(p.phone)) return p.phone[0]?.value ?? '';
@@ -220,12 +310,13 @@ function phoneOf(deal: PipedriveDeal): string {
 export async function loadDashboardData(): Promise<DashboardData> {
   const base = await resolveBase();
 
-  const [deals, activities, stages, pipelines, dealFields] = await Promise.all([
+  const [deals, activities, stages, pipelines, dealFields, users] = await Promise.all([
     fetchAllDeals(base),
     fetchAllActivities(base),
     fetchStages(base),
     fetchPipelines(base),
     fetchDealFields(base),
+    fetchUsers(base),
   ]);
 
   const firstActivity = firstActivityByDeal(activities);
@@ -239,14 +330,33 @@ export async function loadDashboardData(): Promise<DashboardData> {
     (fuenteField?.options ?? []).map((o) => [String(o.id), o.label]),
   );
 
+  // "Trato - Etiqueta" es un enum nativo: el deal guarda ids de opción, y las
+  // etiquetas (nombre y color) viven en la definición del campo.
+  const etiquetaField = dealFields.find((f) => f.key === FIELD.ETIQUETA);
+  const etiquetaNames = new Map<string, string>(
+    (etiquetaField?.options ?? []).map((o) => [String(o.id), o.label]),
+  );
+
   const sources: string[] = [];
   const sourceIdx = new Map<string, number>();
+  const labels: string[] = [];
+  const labelIdx = new Map<string, number>();
   const campaigns: string[] = [];
   const campaignIdx = new Map<string, number>();
   const advisors: string[] = [];
   const advisorIdx = new Map<string, number>();
   const lossReasons: string[] = [];
   const lossReasonIdx = new Map<string, number>();
+
+  // El usuario de una actividad entra a la MISMA lista de asesores que los
+  // dueños de trato, emparejando por nombre: así "Damariz Montero" es el mismo
+  // índice venga de un deal o de una actividad. Se define antes del recorrido
+  // de tratos porque el primer contacto se acredita al creador de la actividad.
+  const userName = new Map<number, string>(
+    users.map((u) => [u.id, u.name?.trim() || `Usuario ${u.id}`]),
+  );
+  const advisorDeUsuario = (userId: number | null | undefined) =>
+    intern(advisors, advisorIdx, (userId != null && userName.get(userId)) || 'Sin asignar');
 
   const now = Date.now();
   const leads: Lead[] = [];
@@ -275,6 +385,20 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const advisorLabel = deal.owner_name?.trim() || 'Sin asignar';
     const advisor = intern(advisors, advisorIdx, advisorLabel);
 
+    // Un trato sin etiqueta apunta a "Sin etiqueta" en vez de quedar con la
+    // lista vacía: así el filtro puede aislarlos, que es justo la pregunta
+    // interesante ("¿qué leads nadie clasificó?").
+    const etiquetaIds = labelIdsOf(deal);
+    const leadLabels = etiquetaIds.length
+      ? [
+          ...new Set(
+            etiquetaIds.map((id) =>
+              intern(labels, labelIdx, etiquetaNames.get(id) ?? `Etiqueta ${id}`),
+            ),
+          ),
+        ]
+      : [intern(labels, labelIdx, SIN_ETIQUETA)];
+
     const rawContenido = deal[FIELD.CONTENIDO];
     const content = classifyContent(typeof rawContenido === 'string' ? rawContenido : '');
 
@@ -284,6 +408,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
     const name = deal.person_name?.trim() || deal.title?.trim() || 'Sin nombre';
     const phone = phoneOf(deal);
+    const primera = firstActivity.get(deal.id);
 
     leads.push({
       id: deal.id,
@@ -295,6 +420,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       lossReason,
       source,
       campaign,
+      labels: leadLabels,
       content,
       project,
       recoverable: isLost && isRecoverable(reason),
@@ -307,7 +433,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
       lastActivity: dateOnly(deal.last_activity_date),
       name,
       phone,
-      firstContactHours: firstContactHours(deal, firstActivity.get(deal.id)),
+      firstContactHours: firstContactHours(deal, primera?.ts),
+      firstContactBy: primera ? advisorDeUsuario(primera.creador) : -1,
     });
 
     // Una separación abierta ya es una venta comprometida, aunque el CRM
@@ -334,9 +461,14 @@ export async function loadDashboardData(): Promise<DashboardData> {
     .map((s, i) => (DIGITAL_SOURCES.includes(normalize(s)) ? i : -1))
     .filter((i) => i >= 0);
 
+  const dealIds = new Set(leads.map((l) => l.id));
+
+  const activityDays = buildActivityDays(activities, dealIds, advisorDeUsuario);
+
   const meta: Meta = {
     sources,
     campaigns,
+    labels,
     projects: [...PROJECTS],
     advisors,
     lossReasons,
@@ -346,7 +478,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
   return {
     leads,
     sales,
-    meetings: buildMeetings(activities, new Set(leads.map((l) => l.id))),
+    meetings: buildMeetings(activities, dealIds),
+    activityDays,
     meta,
     fetchedAt: new Date().toISOString(),
     total: leads.length,

@@ -101,6 +101,15 @@ function buildChips(f: FilterState, meta: Meta): Chip[] {
     }),
   );
 
+  f.labels.forEach((i) =>
+    chips.push({
+      key: `lab-${i}`,
+      group: 'Etiqueta',
+      label: meta.labels[i] ?? `#${i}`,
+      clear: { labels: f.labels.filter((x) => x !== i) },
+    }),
+  );
+
   return chips;
 }
 

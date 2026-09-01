@@ -26,6 +26,12 @@ export interface FilterState {
   sources: number[];
   /** Índices en `meta.campaigns`. */
   campaigns: number[];
+  /**
+   * Índices en `meta.labels`. Un lead pasa si tiene **al menos una** de las
+   * etiquetas seleccionadas, porque un trato puede llevar varias y exigir
+   * todas devolvería casi siempre cero.
+   */
+  labels: number[];
   /** Índices en `meta.projects`. */
   projects: number[];
   /** `true` = sólo digital, `false` = sólo no-digital, `null` = ambos. */
@@ -45,6 +51,7 @@ export const defaultFilters: FilterState = {
   exStatus: [],
   sources: [],
   campaigns: [],
+  labels: [],
   projects: [],
   digital: null,
   year: null,
@@ -91,6 +98,7 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
   const projectSet = st.projects.length ? new Set(st.projects) : null;
   const sourceSet = st.sources.length ? new Set(st.sources) : null;
   const campaignSet = st.campaigns.length ? new Set(st.campaigns) : null;
+  const labelSet = st.labels.length ? new Set(st.labels) : null;
   const statusSet = st.status.length ? new Set(st.status) : null;
   const exStatusSet = st.exStatus.length ? new Set(st.exStatus) : null;
   const monthSet = st.months.length ? new Set(st.months) : null;
@@ -116,6 +124,9 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
 
     if (st.dateFrom && l.date < st.dateFrom) return false;
     if (st.dateTo && l.date > st.dateTo) return false;
+
+    // Va de último porque es el único predicado que recorre un arreglo.
+    if (labelSet && !l.labels.some((i) => labelSet.has(i))) return false;
 
     return true;
   });

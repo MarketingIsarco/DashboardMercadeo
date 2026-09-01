@@ -108,6 +108,26 @@ export const ROTTEN_DAYS: Record<number, Record<number, number> | null> = {
 export const MEETING_TYPES = ['meeting'];
 
 /**
+ * Etiquetas de trato que **no** son una campaña outbound.
+ *
+ * En el CRM la etiqueta carga dos cosas distintas: en qué campaña de
+ * reactivación entró un lead —lo que mide el capítulo 06 de Mercadeo— y su
+ * estado comercial ("Cotizó", "warmlead"), que no es una campaña de nada. Sin
+ * esta lista el capítulo mezclaría ambas y la efectividad quedaría diluida.
+ *
+ * Los tratos sin etiqueta tampoco entran, pero se excluyen aparte en el propio
+ * capítulo: "Sin etiqueta" es una etiqueta sintética del dashboard, no una del
+ * CRM, y ponerla aquí escondería la regla.
+ *
+ * Se compara normalizado (sin tildes ni mayúsculas): da igual cómo lo escriban
+ * en Pipedrive.
+ */
+export const OUTBOUND_EXCLUDED_LABELS = ['Cotizó', 'warmlead'];
+
+/** Etiqueta sintética que el dashboard le pone a los tratos sin etiquetar. */
+export const SIN_ETIQUETA = 'Sin etiqueta';
+
+/**
  * Desfase entre la hora que devuelve Pipedrive (UTC) y la hora de Bogotá.
  *
  * Sólo importa donde la **hora del día** es el dato — el mapa de calor de

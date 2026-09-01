@@ -38,6 +38,13 @@ export interface Lead {
   source: number;
   /** Index into the runtime-derived campaign list. */
   campaign: number;
+  /**
+   * Índices en la lista de etiquetas ("Trato - Etiqueta" de Pipedrive).
+   *
+   * Es un arreglo porque Pipedrive admite varias etiquetas por trato. Nunca
+   * está vacío: un trato sin etiquetar apunta a "Sin etiqueta".
+   */
+  labels: number[];
   content: ContentType;
   /** Index into `PROJECTS` — derived from `pipeline_id`. */
   project: number;
@@ -70,6 +77,16 @@ export interface Lead {
    * del modelo que no se puede derivar del deal solo.
    */
   firstContactHours: number | null;
+
+  /**
+   * Índice en `Meta.advisors` de quien **creó** la primera actividad del trato;
+   * `-1` cuando no hay ninguna.
+   *
+   * El tiempo de primer contacto se le acredita a quien atendió el lead, que no
+   * siempre es su dueño: un asesor puede cubrir los leads de otro un fin de
+   * semana, y esa respuesta es suya.
+   */
+  firstContactBy: number;
 }
 
 /**
@@ -118,12 +135,44 @@ export interface Meeting {
 }
 
 /**
+ * Actividades que se registraron sobre un trato en un mismo día.
+ *
+ * Se agrupa por trato, asesor y día en el servidor —no se manda una fila por
+ * actividad— porque son ~31.000 y el navegador sólo necesita el conteo. Se
+ * conserva el `dealId` en lugar de agregar directo por asesor para que el
+ * capítulo pueda aplicarle los filtros globales cruzando por trato, igual que
+ * el mapa de calor de reuniones.
+ *
+ * El asesor es el **usuario asignado a la actividad**, no el dueño del trato:
+ * lo que se mide es quién gestionó, no de quién era el lead. Atribuir por dueño
+ * del trato le cargaba a un asesor toda la gestión que otros —o una
+ * automatización— hacían sobre sus leads, y el número no cuadraba con el CRM.
+ *
+ * La fecha es la **de creación** (`add_time`), ya convertida a hora de Bogotá:
+ * el día en que el asesor dejó constancia de la gestión, no aquel para el que
+ * la agendó. Se cuentan las actividades hechas **y** las pendientes: crear la
+ * actividad ya es gestión.
+ */
+export interface ActivityDay {
+  /** Coincide con `Lead.id`: es la llave para aplicarle los filtros globales. */
+  dealId: number;
+  /** Índice en `Meta.advisors` del usuario asignado a la actividad. */
+  advisor: number;
+  /** `YYYY-MM-DD` en que se creó la actividad, en hora de Bogotá. */
+  date: string;
+  /** Cuántas actividades de ese asesor cayeron en ese trato y ese día. */
+  count: number;
+}
+
+/**
  * Label lists resolved from Pipedrive at request time. Indices in `Lead` point
  * into these, so the two must always travel together.
  */
 export interface Meta {
   sources: string[];
   campaigns: string[];
+  /** Etiquetas de trato descubiertas en la carga, más "Sin etiqueta". */
+  labels: string[];
   projects: string[];
   advisors: string[];
   lossReasons: string[];
@@ -136,6 +185,8 @@ export interface DashboardData {
   sales: SaleDeal[];
   /** Reuniones agendadas sobre tratos del dashboard. */
   meetings: Meeting[];
+  /** Actividades registradas por trato y día — capítulo 04 de Gerencia. */
+  activityDays: ActivityDay[];
   meta: Meta;
   /** ISO timestamp of when this payload was pulled from Pipedrive. */
   fetchedAt: string;
