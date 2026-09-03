@@ -143,10 +143,17 @@ export interface Meeting {
  * capítulo pueda aplicarle los filtros globales cruzando por trato, igual que
  * el mapa de calor de reuniones.
  *
- * El asesor es el **usuario asignado a la actividad**, no el dueño del trato:
- * lo que se mide es quién gestionó, no de quién era el lead. Atribuir por dueño
- * del trato le cargaba a un asesor toda la gestión que otros —o una
- * automatización— hacían sobre sus leads, y el número no cuadraba con el CRM.
+ * El asesor es quien **creó** la actividad (`created_by_user_id`), no su
+ * responsable ni el dueño del trato: lo que se mide es quién gestionó, no de
+ * quién era el lead.
+ *
+ * ⚠️ La contracara: en Pipedrive el creador de una actividad nacida de una
+ * automatización o de la API es el usuario dueño del token, así que ese usuario
+ * acumula gestión que ninguna persona hizo. Por eso el capítulo 04 marca los
+ * cruces de proyecto (`lib/cruces.ts`) en vez de confiar en el conteo a ciegas.
+ * Es también la razón por la que este número no coincide con "actividades
+ * abiertas de X" en el CRM: allá se filtra por responsable y sólo las
+ * pendientes; aquí se cuenta por creador, hechas y pendientes.
  *
  * La fecha es la **de creación** (`add_time`), ya convertida a hora de Bogotá:
  * el día en que el asesor dejó constancia de la gestión, no aquel para el que
@@ -156,7 +163,7 @@ export interface Meeting {
 export interface ActivityDay {
   /** Coincide con `Lead.id`: es la llave para aplicarle los filtros globales. */
   dealId: number;
-  /** Índice en `Meta.advisors` del usuario asignado a la actividad. */
+  /** Índice en `Meta.advisors` de quien creó la actividad. */
   advisor: number;
   /** `YYYY-MM-DD` en que se creó la actividad, en hora de Bogotá. */
   date: string;

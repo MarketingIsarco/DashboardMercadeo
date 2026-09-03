@@ -98,6 +98,42 @@ export const ROTTEN_DAYS: Record<number, Record<number, number> | null> = {
 };
 
 /**
+ * Proyectos que cada asesor tiene asignados. Alimenta la alerta de gestión
+ * cruzada del capítulo 04 de Gerencia.
+ *
+ * ⚠️ No existe en Pipedrive — es una asignación comercial, se edita a mano.
+ *
+ * La política es exclusividad dentro de la constructora: los asesores de Inari
+ * no atienden Tinguazul, y al contrario. Una actividad sobre un proyecto que no
+ * está en su lista no es gestión, es un error de operación del CRM —gestión
+ * cargada al usuario equivocado, o una automatización disparando con el token
+ * de otro— y el tablero la **marca sin descontarla**: la cifra tiene que seguir
+ * cuadrando con el CRM mientras el error se corrige.
+ *
+ * La llave se compara contra el **primer nombre** del usuario de Pipedrive,
+ * normalizado (minúsculas, sin tildes). Amarrar la política al nombre completo
+ * la rompería en silencio el día que a alguien le agreguen un apellido o le
+ * corrijan un tilde en el CRM.
+ *
+ * Sólo se auditan los asesores listados aquí. Uno que no aparezca —los de
+ * inmobiliaria, un apoyo comercial, un usuario nuevo— no genera alerta nunca.
+ */
+export const ADVISOR_PROJECTS: Record<string, number[]> = {
+  cristhiam: [0],
+  damariz: [0],
+  oscar: [1, 2],
+};
+
+/**
+ * Proyectos donde la exclusividad se audita.
+ *
+ * Sólo la constructora. Un asesor de Inari que registre gestión en Bodegas u
+ * Oficinas no se marca: la regla que pidió Gerencia es Inari ↔ Tinguazul, y
+ * ampliarla de más llenaría el tablero de alertas que nadie pidió.
+ */
+export const ADVISOR_SCOPE_IDX = CONSTRUCTORA_IDX;
+
+/**
  * Tipos de actividad que cuentan como reunión agendada con el cliente.
  *
  * Son los `key_string` de `/activityTypes`. Hoy la cuenta tiene un solo tipo

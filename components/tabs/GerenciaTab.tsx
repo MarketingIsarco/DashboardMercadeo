@@ -11,6 +11,8 @@ import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { MonthSelect } from '@/components/ui/MonthSelect';
 import { Section } from '@/components/ui/Section';
 import { MONTH_SHORT, PROJECTS, PROJECT_COLORS, STAGES } from '@/lib/config/negocio';
+import { crucesDeGestion, totalCruces } from '@/lib/cruces';
+import type { CruceAsesor } from '@/lib/cruces';
 import { firstName, fmtHoras, median, monthLabel, pct } from '@/lib/format';
 import {
   accionesPorAsesor,
@@ -24,7 +26,7 @@ import {
 import type { ActivityState, SerieAsesor } from '@/lib/gestion';
 import { applyFilters, isAbierto, isPerdido, isVenta } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
-import type { DashboardData, Lead, Meeting, Meta } from '@/lib/types';
+import type { ActivityDay, DashboardData, Lead, Meeting, Meta } from '@/lib/types';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -868,6 +870,14 @@ interface ResumenAcciones {
   porAsesor: Map<number, number>;
   total: number;
   periodo: PeriodoAcciones;
+  /**
+   * Índice de asesor → gestión sobre proyectos que no le corresponden.
+   *
+   * Sale del mismo recorrido filtrado que `porAsesor`, así que siempre es un
+   * subconjunto de él: lo que la alerta señala está dentro del número que
+   * acompaña, nunca por fuera.
+   */
+  cruces: Map<number, CruceAsesor>;
 }
 
 /**
@@ -903,8 +913,14 @@ function resumenAcciones(
   today: string,
 ): ResumenAcciones {
   // El trato decide si la actividad entra al filtro; a quién se le acredita ya
-  // viene resuelto desde el servidor en `a.advisor` (el usuario asignado).
-  const tratosPermitidos = new Set(tratosSinFiltroDeTiempo(data, filters, meta).map((l) => l.id));
+  // viene resuelto desde el servidor en `a.advisor` (quien CREÓ la actividad).
+  //
+  // Se guarda el trato completo, no sólo su id: la alerta de gestión cruzada
+  // necesita su proyecto y el nombre del contacto, y volver a recorrer los
+  // leads para eso abriría la puerta a que los dos universos se separen.
+  const tratosPermitidos = new Map<number, Lead>(
+    tratosSinFiltroDeTiempo(data, filters, meta).map((l) => [l.id, l]),
+  );
 
   const mesPermitido = (mes: string) => {
     if (filters.year !== null && mes.slice(0, 4) !== filters.year) return false;
@@ -914,6 +930,7 @@ function resumenAcciones(
   };
 
   const porAsesor = new Map<number, number>();
+  const filtradas: ActivityDay[] = [];
   let total = 0;
   let primera: string | null = null;
   let ultima: string | null = null;
@@ -927,6 +944,7 @@ function resumenAcciones(
     if (primera === null || a.date < primera) primera = a.date;
     if (ultima === null || a.date > ultima) ultima = a.date;
     porAsesor.set(a.advisor, (porAsesor.get(a.advisor) ?? 0) + a.count);
+    filtradas.push(a);
     total += a.count;
   }
 
@@ -945,7 +963,12 @@ function resumenAcciones(
     }
   }
 
-  return { porAsesor, total, periodo: { desde, hasta, dias } };
+  return {
+    porAsesor,
+    total,
+    periodo: { desde, hasta, dias },
+    cruces: crucesDeGestion(filtradas, tratosPermitidos, meta.advisors),
+  };
 }
 
 /** `2026-08-03` → `'3 Ago 26'`. */
@@ -964,7 +987,12 @@ function TablaAsesores({
   acciones: ResumenAcciones;
   advisors: string[];
 }) {
-  const { periodo } = acciones;
+  const { periodo, cruces } = acciones;
+
+  /** Asesor cuyo detalle de cruces está abierto; `null` = ninguno. */
+  const [detalle, setDetalle] = useState<number | null>(null);
+  const cruzadas = totalCruces(cruces);
+  const abierto = detalle === null ? undefined : cruces.get(detalle);
 
   // Quien registró gestión pero no tiene leads propios en el filtro —un apoyo
   // comercial, alguien que cubrió vacaciones— también necesita fila: si no, sus
@@ -999,8 +1027,13 @@ function TablaAsesores({
           </>
         ) : (
           'en el filtro actual'
-        )}
+        )}{' '}
+        · <IconoCruce /> marca gestión sobre un proyecto que no le corresponde al asesor
       </p>
+
+      {cruzadas > 0 ? (
+        <BannerCruces total={cruzadas} cruces={cruces} />
+      ) : null}
 
       <DataTable
         rows={conTotal}
@@ -1008,9 +1041,21 @@ function TablaAsesores({
         columns={[
           {
             header: 'Asesor',
-            cell: (r) => (
-              <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>
-            ),
+            cell: (r) => {
+              const cruce = esTotal(r) ? undefined : cruces.get(r.idx);
+              return (
+                <span className="flex items-center gap-1.5">
+                  <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>
+                  {cruce ? (
+                    <BotonCruce
+                      cruce={cruce}
+                      abierto={detalle === r.idx}
+                      onToggle={() => setDetalle(detalle === r.idx ? null : r.idx)}
+                    />
+                  ) : null}
+                </span>
+              );
+            },
           },
           ...BANDAS_VELOCIDAD.map((b, i) => ({
             header: b.corto,
@@ -1032,6 +1077,168 @@ function TablaAsesores({
             align: 'right',
             cell: (r) => num(actividades(r)),
           },
+        ]}
+      />
+
+      {abierto ? <DetalleCruce cruce={abierto} onCerrar={() => setDetalle(null)} /> : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Alerta de gestión cruzada
+//
+// La política vive en `ADVISOR_PROJECTS` (negocio.ts) y la detección en
+// `lib/cruces.ts`. Aquí sólo se pinta.
+//
+// La alerta **no descuenta**: el conteo del asesor sigue siendo el que ve en
+// Pipedrive. Si el tablero restara por su cuenta, el día que alguien compare
+// las dos cifras la que quedaría en duda es la del tablero.
+// ─────────────────────────────────────────────────────────────────────
+
+const CRUCE_COLOR = '#f59e0b';
+
+/** Triángulo de exclamación. Hereda el color del texto que lo contiene. */
+function IconoCruce({ size = 12 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      aria-hidden
+      style={{ display: 'inline-block', verticalAlign: '-1px', color: CRUCE_COLOR }}
+    >
+      <path
+        d="M8 1.6 15 14H1L8 1.6Z"
+        fill="currentColor"
+        fillOpacity="0.18"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M8 6v3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="11.7" r="0.85" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Lista de proyectos en texto: `[1, 2]` → `'Tinguazul 2A y Tinguazul 1'`. */
+function listaProyectos(idx: number[]): string {
+  const nombres = idx.map((i) => PROJECTS[i] ?? `#${i}`);
+  if (nombres.length <= 1) return nombres[0] ?? '—';
+  return `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+}
+
+/** Frase de una línea que explica el cruce de un asesor. */
+function fraseCruce(c: CruceAsesor): string {
+  return `${c.nombre} registró ${c.count.toLocaleString('es-CO')} ${
+    c.count === 1 ? 'actividad' : 'actividades'
+  } en ${listaProyectos(c.ajenos)}, y su asignación es ${listaProyectos(c.permitidos)}`;
+}
+
+/** Resumen del periodo, antes de la tabla. Da el tamaño del problema. */
+function BannerCruces({ total, cruces }: { total: number; cruces: Map<number, CruceAsesor> }) {
+  const nombres = [...cruces.values()].sort((a, b) => b.count - a.count);
+
+  return (
+    <div
+      className="mb-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-2xs"
+      style={{ borderColor: `${CRUCE_COLOR}55`, background: `${CRUCE_COLOR}12` }}
+      role="status"
+    >
+      <span className="mt-px">
+        <IconoCruce size={13} />
+      </span>
+      <span className="text-dim">
+        <b>
+          {total.toLocaleString('es-CO')} {total === 1 ? 'actividad' : 'actividades'} del periodo
+        </b>{' '}
+        {total === 1 ? 'quedó' : 'quedaron'} registradas sobre un proyecto que no corresponde al
+        asesor ({nombres.map((c) => `${c.nombre}: ${c.count.toLocaleString('es-CO')}`).join(' · ')}).
+        Siguen sumando en la tabla — el conteo tiene que seguir cuadrando con Pipedrive. Abre el{' '}
+        <IconoCruce /> de cada asesor para ver los tratos y corregirlos en el CRM.
+      </span>
+    </div>
+  );
+}
+
+function BotonCruce({
+  cruce,
+  abierto,
+  onToggle,
+}: {
+  cruce: CruceAsesor;
+  abierto: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={abierto}
+      title={`${fraseCruce(cruce)}. Click para ver el detalle.`}
+      className="flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors hover:bg-accent-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+      style={abierto ? { background: `${CRUCE_COLOR}22` } : undefined}
+    >
+      <IconoCruce />
+      <span className="text-2xs font-bold" style={{ color: CRUCE_COLOR }}>
+        {cruce.count.toLocaleString('es-CO')}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Los tratos ajenos de un asesor, uno por fila.
+ *
+ * Se agrupa por trato y no por día a propósito: lo que se hace con esto es
+ * abrir el trato en Pipedrive y reasignar la gestión, y para eso importa el
+ * trato, no cada uno de los días en que se tocó.
+ */
+function DetalleCruce({ cruce, onCerrar }: { cruce: CruceAsesor; onCerrar: () => void }) {
+  return (
+    <div
+      className="mt-3 rounded-xl border p-3"
+      style={{ borderColor: `${CRUCE_COLOR}55`, background: `${CRUCE_COLOR}0d` }}
+    >
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <p className="text-2xs text-dim">
+          <IconoCruce /> <b>{fraseCruce(cruce)}</b> · {cruce.tratos.length}{' '}
+          {cruce.tratos.length === 1 ? 'trato' : 'tratos'} por revisar en el CRM
+        </p>
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="shrink-0 text-2xs font-semibold text-muted hover:text-accent"
+        >
+          Cerrar
+        </button>
+      </div>
+
+      <DataTable
+        rows={cruce.tratos}
+        maxHeight={260}
+        empty="Sin tratos cruzados."
+        columns={[
+          {
+            header: 'Proyecto',
+            cell: (t) => (
+              <span
+                className="font-semibold"
+                style={{ color: PROJECT_COLORS[t.project] ?? CRUCE_COLOR }}
+              >
+                {PROJECTS[t.project] ?? `#${t.project}`}
+              </span>
+            ),
+          },
+          { header: 'Trato', cell: (t) => <span className="font-semibold">{t.name}</span> },
+          { header: 'ID Pipedrive', align: 'right', cell: (t) => <span className="text-muted">{t.dealId}</span> },
+          {
+            header: 'Actividades',
+            align: 'right',
+            cell: (t) => <b style={{ color: CRUCE_COLOR }}>{t.count.toLocaleString('es-CO')}</b>,
+          },
+          { header: 'Última gestión', align: 'right', cell: (t) => fechaCorta(t.ultima) },
         ]}
       />
     </div>
