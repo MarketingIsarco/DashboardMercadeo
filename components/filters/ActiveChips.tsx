@@ -1,6 +1,7 @@
 'use client';
 
 import { describePeriod } from '@/components/filters/PeriodFilter';
+import { STAGES } from '@/lib/config/negocio';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import type { Meta, Status } from '@/lib/types';
 import type { FilterState } from '@/lib/selectors';
@@ -53,6 +54,24 @@ function buildChips(f: FilterState, meta: Meta): Chip[] {
       group: 'Proyecto',
       label: meta.projects[i] ?? `#${i}`,
       clear: { projects: f.projects.filter((x) => x !== i) },
+    }),
+  );
+
+  f.stages.forEach((i) =>
+    chips.push({
+      key: `stg-${i}`,
+      group: 'Etapa',
+      label: STAGES[i] ?? `#${i}`,
+      clear: { stages: f.stages.filter((x) => x !== i) },
+    }),
+  );
+  f.exStages.forEach((i) =>
+    chips.push({
+      key: `exstg-${i}`,
+      group: 'Etapa',
+      label: STAGES[i] ?? `#${i}`,
+      negated: true,
+      clear: { exStages: f.exStages.filter((x) => x !== i) },
     }),
   );
 

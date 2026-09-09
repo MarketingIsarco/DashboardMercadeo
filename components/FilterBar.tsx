@@ -4,6 +4,7 @@ import { ActiveChips } from '@/components/filters/ActiveChips';
 import { OptionFilter } from '@/components/filters/OptionFilter';
 import { PeriodFilter } from '@/components/filters/PeriodFilter';
 import { Segmented } from '@/components/ui/Segmented';
+import { STAGE_FILTER_IDX, STAGES } from '@/lib/config/negocio';
 import { defaultFilters } from '@/lib/selectors';
 import type { FilterState, Period, Unidad } from '@/lib/selectors';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
@@ -14,6 +15,13 @@ const STATUS_OPTIONS = [
   { value: STATUS_LOST as Status, label: 'Perdido' },
   { value: STATUS_WON as Status, label: 'Ganado' },
 ];
+
+/**
+ * Etapas ofrecidas, en orden del embudo. La lista viene de `STAGE_FILTER_IDX`
+ * para que agregar o quitar una etapa del filtro sea una sola edición, en
+ * `config/negocio.ts`, y no haya que tocar la barra ni los chips.
+ */
+const STAGE_OPTIONS = STAGE_FILTER_IDX.map((value) => ({ value, label: STAGES[value] }));
 
 /** `null` es la opción neutra explícita, no la ausencia de elección. */
 const UNIDAD_SEGMENTS: Array<{ value: Unidad; label: string }> = [
@@ -92,6 +100,17 @@ export function FilterBar({
             options={meta.projects.map((label, value) => ({ value, label }))}
             include={filters.projects}
             onChange={({ include }) => set({ projects: include })}
+          />
+        </Field>
+
+        <Field label="Etapa">
+          <OptionFilter
+            label="Etapa"
+            options={STAGE_OPTIONS}
+            include={filters.stages}
+            exclude={filters.exStages}
+            onChange={({ include, exclude }) => set({ stages: include, exStages: exclude })}
+            width={240}
           />
         </Field>
 

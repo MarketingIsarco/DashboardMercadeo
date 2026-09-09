@@ -22,6 +22,15 @@ export interface FilterState {
   exMonths: string[];
   status: Status[];
   exStatus: Status[];
+  /**
+   * Índices en `STAGES` de la etapa **actual** del trato. Vacío = todas.
+   *
+   * Es la etapa donde está parado hoy, no la más avanzada que alcanzó: ver
+   * `STAGE_FILTER_IDX` en `config/negocio.ts`.
+   */
+  stages: number[];
+  /** Etapas actuales excluidas explícitamente. Gana sobre `stages`. */
+  exStages: number[];
   /** Índices en `meta.sources`. */
   sources: number[];
   /** Índices en `meta.campaigns`. */
@@ -49,6 +58,8 @@ export const defaultFilters: FilterState = {
   exMonths: [],
   status: [],
   exStatus: [],
+  stages: [],
+  exStages: [],
   sources: [],
   campaigns: [],
   labels: [],
@@ -101,6 +112,8 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
   const labelSet = st.labels.length ? new Set(st.labels) : null;
   const statusSet = st.status.length ? new Set(st.status) : null;
   const exStatusSet = st.exStatus.length ? new Set(st.exStatus) : null;
+  const stageSet = st.stages.length ? new Set(st.stages) : null;
+  const exStageSet = st.exStages.length ? new Set(st.exStages) : null;
   const monthSet = st.months.length ? new Set(st.months) : null;
   const exMonthSet = st.exMonths.length ? new Set(st.exMonths) : null;
 
@@ -115,6 +128,10 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
 
     if (statusSet && !statusSet.has(l.status)) return false;
     if (exStatusSet && exStatusSet.has(l.status)) return false;
+
+    // Etapa actual, no alcanzada: comparación exacta, no `>=`.
+    if (stageSet && !stageSet.has(l.stage)) return false;
+    if (exStageSet && exStageSet.has(l.stage)) return false;
 
     if (st.digital === true && !digitalSet.has(l.source)) return false;
     if (st.digital === false && digitalSet.has(l.source)) return false;

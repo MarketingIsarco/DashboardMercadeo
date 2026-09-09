@@ -77,6 +77,24 @@ export const STAGE_NEGOCIACION = 4;
 export const STAGE_SEPARACION = 5;
 
 /**
+ * Etapas que se ofrecen en el filtro "Etapa" de la barra principal.
+ *
+ * El filtro lee la etapa **actual** del trato —dónde está parado hoy—, no la
+ * más avanzada que alcanzó. Es la lectura que el equipo comercial ya tiene en
+ * la cabeza porque es la del CRM, y en los perdidos dice dónde se cayeron.
+ *
+ * ⚠️ No confundir con los umbrales `STAGE_*` de arriba: los KPIs del embudo
+ * (citas, visitas, separaciones) siguen contando por etapa alcanzada
+ * (`stage >= X`). Filtrar por "Interesado" deja esos KPIs en cero, y eso es
+ * correcto: nadie que siga en Interesado ha llegado a una cita.
+ *
+ * "Firma & Entrega" queda fuera por decisión de Mercadeo — el filtro cubre la
+ * gestión comercial, no la posventa. Consecuencia: un trato ya en firma no
+ * aparece bajo ninguna opción del filtro.
+ */
+export const STAGE_FILTER_IDX = [0, 1, 2, 3, 4, 5];
+
+/**
  * Días máximos que un lead abierto puede pasar sin movimiento antes de contarse
  * como vencido ("rotting"), por índice de proyecto → índice de etapa.
  *
