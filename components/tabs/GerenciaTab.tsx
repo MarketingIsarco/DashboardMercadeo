@@ -840,7 +840,7 @@ function AccionesDiarias({
 // propio selector), esta tabla **sí respeta los filtros de tiempo del menú
 // principal**, y los aplica a la fecha en que se creó la actividad, no a la del
 // lead: "julio" aquí es lo que el equipo gestionó en julio, aunque el trato
-// haya entrado en marzo. Los demás filtros (proyecto, unidad, fuente, campaña,
+// haya entrado en marzo. Los demás filtros (proyecto, etapa, fuente, campaña,
 // estado) sí son propiedades del trato y se resuelven cruzando por `dealId`.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1349,7 +1349,7 @@ const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
  * Los filtros de tiempo se aplican a la fecha de la **reunión**, no a la del
  * lead: "julio" aquí significa lo que se agendó en julio, aunque el lead haya
  * entrado en marzo — de otro modo el mapa mostraría la agenda de una cohorte y
- * no la de un mes. Los demás filtros (proyecto, unidad, fuente, campaña,
+ * no la de un mes. Los demás filtros (proyecto, etapa, fuente, campaña,
  * estado) sí son propiedades del trato, y se resuelven cruzando por `dealId`.
  */
 function filtrarReuniones(data: DashboardData, filters: FilterState, meta: Meta): Meeting[] {

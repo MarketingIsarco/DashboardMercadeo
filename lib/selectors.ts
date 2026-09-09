@@ -1,6 +1,5 @@
 import {
   CONSTRUCTORA_IDX,
-  INMOBILIARIA_IDX,
   META,
   MIN_YEAR,
   STAGE_CITA,
@@ -12,7 +11,6 @@ import type { Goal } from '@/lib/config/negocio';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import type { DashboardData, Lead, Meta, Status } from '@/lib/types';
 
-export type Unidad = 'constructora' | 'inmobiliaria' | null;
 export type Period = 'month' | 'year';
 
 export interface FilterState {
@@ -46,7 +44,6 @@ export interface FilterState {
   /** `true` = sólo digital, `false` = sólo no-digital, `null` = ambos. */
   digital: boolean | null;
   year: string | null;
-  unidad: Unidad;
   period: Period;
   /** `YYYY-MM-DD` inclusivo. */
   dateFrom: string | null;
@@ -66,7 +63,6 @@ export const defaultFilters: FilterState = {
   projects: [],
   digital: null,
   year: null,
-  unidad: null,
   period: 'month',
   dateFrom: null,
   dateTo: null,
@@ -119,8 +115,6 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
 
   return leads.filter((l) => {
     if (projectSet && !projectSet.has(l.project)) return false;
-    if (st.unidad === 'constructora' && !CONSTRUCTORA_IDX.includes(l.project)) return false;
-    if (st.unidad === 'inmobiliaria' && !INMOBILIARIA_IDX.includes(l.project)) return false;
 
     if (st.year !== null && l.date.slice(0, 4) !== st.year) return false;
     if (monthSet && !monthSet.has(l.month)) return false;
@@ -207,11 +201,10 @@ export function computeKpis(f: Lead[]): Kpis {
  *
  * Devuelve `null` cuando la meta no tiene sentido: la inmobiliaria no tiene
  * metas definidas, así que compararse contra una suma de constructora sería
- * inventar el número.
+ * inventar el número. Con sólo proyectos de inmobiliaria seleccionados, `cons`
+ * queda vacío y se cae por ahí — es lo que antes atajaba el filtro de Unidad.
  */
 export function goalFor(st: FilterState): Goal | null {
-  if (st.unidad === 'inmobiliaria') return null;
-
   const cons = st.projects.filter((i) => CONSTRUCTORA_IDX.includes(i));
   if (st.projects.length && cons.length === 0) return null;
 

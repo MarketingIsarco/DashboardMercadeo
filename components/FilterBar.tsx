@@ -6,7 +6,7 @@ import { PeriodFilter } from '@/components/filters/PeriodFilter';
 import { Segmented } from '@/components/ui/Segmented';
 import { STAGE_FILTER_IDX, STAGES } from '@/lib/config/negocio';
 import { defaultFilters } from '@/lib/selectors';
-import type { FilterState, Period, Unidad } from '@/lib/selectors';
+import type { FilterState, Period } from '@/lib/selectors';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import type { Meta, Status } from '@/lib/types';
 
@@ -22,13 +22,6 @@ const STATUS_OPTIONS = [
  * `config/negocio.ts`, y no haya que tocar la barra ni los chips.
  */
 const STAGE_OPTIONS = STAGE_FILTER_IDX.map((value) => ({ value, label: STAGES[value] }));
-
-/** `null` es la opción neutra explícita, no la ausencia de elección. */
-const UNIDAD_SEGMENTS: Array<{ value: Unidad; label: string }> = [
-  { value: null, label: 'Todas' },
-  { value: 'constructora', label: 'Constructora' },
-  { value: 'inmobiliaria', label: 'Inmobiliaria' },
-];
 
 const CANAL_SEGMENTS: Array<{ value: 'todos' | 'digital' | 'no', label: string }> = [
   { value: 'todos', label: 'Todos' },
@@ -79,17 +72,6 @@ export function FilterBar({
   return (
     <div className="rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-end gap-x-4 gap-y-3 p-3">
-        <Field label="Unidad">
-          <Segmented
-            label="Unidad de negocio"
-            segments={UNIDAD_SEGMENTS}
-            value={filters.unidad}
-            // Los proyectos son subconjuntos de la unidad: conservarlos al
-            // cambiarla dejaría un filtro imposible (0 resultados, sin causa visible).
-            onChange={(unidad) => set({ unidad, projects: [] })}
-          />
-        </Field>
-
         <Field label="Periodo">
           <PeriodFilter filters={filters} onChange={set} months={months} years={years} />
         </Field>

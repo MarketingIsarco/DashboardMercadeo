@@ -30,15 +30,6 @@ interface Chip {
 function buildChips(f: FilterState, meta: Meta): Chip[] {
   const chips: Chip[] = [];
 
-  if (f.unidad) {
-    chips.push({
-      key: 'unidad',
-      group: 'Unidad',
-      label: f.unidad === 'constructora' ? 'Constructora' : 'Inmobiliaria',
-      clear: { unidad: null },
-    });
-  }
-
   if (f.year || f.months.length || f.exMonths.length || f.dateFrom || f.dateTo) {
     chips.push({
       key: 'periodo',
