@@ -11,7 +11,6 @@ import type { Goal } from '@/lib/config/negocio';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import type { DashboardData, Lead, Meta, Status } from '@/lib/types';
 
-export type Period = 'month' | 'year';
 
 export interface FilterState {
   /** Meses `YYYY-MM` incluidos. Vacío = todos. */
@@ -44,7 +43,6 @@ export interface FilterState {
   /** `true` = sólo digital, `false` = sólo no-digital, `null` = ambos. */
   digital: boolean | null;
   year: string | null;
-  period: Period;
   /** `YYYY-MM-DD` inclusivo. */
   dateFrom: string | null;
   dateTo: string | null;
@@ -63,7 +61,6 @@ export const defaultFilters: FilterState = {
   projects: [],
   digital: null,
   year: null,
-  period: 'month',
   dateFrom: null,
   dateTo: null,
 };
@@ -144,23 +141,22 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
 }
 
 /**
- * Eje temporal derivado de los datos filtrados.
- * En `period: 'year'` agrupa por año; si no, por mes.
+ * Eje temporal derivado de los datos filtrados. Siempre agrupa por mes.
+ *
+ * Antes existía un control "Agrupar por" (Mes / Año) en la barra principal que
+ * hacía a esta función devolver años. Se quitó: para mirar un año completo se
+ * usa el filtro de Periodo, que ya deja escoger el año, y tener dos maneras de
+ * recortar el mismo eje era la forma de que dos gráficas contaran distinto.
  */
-export function timeAxis(leads: Lead[], period: Period): {
-  keys: string[];
-  labels: string[];
-  isYear: boolean;
-} {
-  const isYear = period === 'year';
-  const keys = [...new Set(leads.map((l) => (isYear ? l.date.slice(0, 4) : l.month)))]
+export function timeAxis(leads: Lead[]): { keys: string[] } {
+  const keys = [...new Set(leads.map((l) => l.month))]
     .filter((k) => k.slice(0, 4) >= MIN_YEAR)
     .sort();
-  return { keys, labels: keys, isYear };
+  return { keys };
 }
 
-export function keyOf(lead: Lead, isYear: boolean): string {
-  return isYear ? lead.date.slice(0, 4) : lead.month;
+export function keyOf(lead: Lead): string {
+  return lead.month;
 }
 
 export interface Kpis {

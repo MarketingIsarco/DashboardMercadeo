@@ -81,11 +81,11 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
       <Section title="02 · Pipeline" sub="Estado del embudo, evolución temporal y comparativo mensual">
         <PipelineVivo leads={filtered} />
         <div className="mt-6">
-          <Timeline leads={filtered} period={filters.period} goal={goal} />
+          <Timeline leads={filtered} goal={goal} />
         </div>
         <div className="mt-6">
           <h3 className="mb-2 text-xs font-semibold text-dim">Comparativo mensual</h3>
-          <Comparativo leads={filtered} period={filters.period} />
+          <Comparativo leads={filtered} />
         </div>
       </Section>
 
@@ -106,18 +106,18 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         <div className="mt-6 grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Fuente mes a mes</h3>
-            <SrcMonth leads={filtered} sources={meta.sources} period={filters.period} />
+            <SrcMonth leads={filtered} sources={meta.sources} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Digital vs No digital</h3>
-            <DigitalMonth leads={filtered} period={filters.period} digitalSources={meta.digitalSources} />
+            <DigitalMonth leads={filtered} digitalSources={meta.digitalSources} />
           </div>
         </div>
       </Section>
 
       {/* 04 · Motivos de Pérdida */}
       <Section title="04 · Motivos de Pérdida" sub="Análisis de leads perdidos por grupo y razón individual">
-        <LossSection leads={filtered} lossReasons={meta.lossReasons} period={filters.period} />
+        <LossSection leads={filtered} lossReasons={meta.lossReasons} />
         <div className="mt-6">
           <h3 className="mb-2 text-xs font-semibold text-dim">Pérdidas por Campaña</h3>
           <p className="mb-2 text-2xs text-muted">
@@ -330,11 +330,9 @@ function PipelineVivo({ leads }: { leads: Lead[] }) {
 
 function Timeline({
   leads,
-  period,
   goal,
 }: {
   leads: Lead[];
-  period: 'month' | 'year';
   goal: ReturnType<typeof goalFor>;
 }) {
   const [gran, setGran] = useState<'month' | 'week' | 'day'>('month');
@@ -350,10 +348,10 @@ function Timeline({
     let metaVisLabel = 'Meta visitas (10%)';
 
     if (gran === 'month') {
-      const ta = timeAxis(leads, period);
-      labels = ta.keys.map((kk) => (ta.isYear ? kk : monthLabel(kk)));
-      counts = ta.keys.map((kk) => leads.filter((l) => keyOf(l, ta.isYear) === kk).length);
-      vis = ta.keys.map((kk) => leads.filter((l) => keyOf(l, ta.isYear) === kk && isVisita(l)).length);
+      const ta = timeAxis(leads);
+      labels = ta.keys.map(monthLabel);
+      counts = ta.keys.map((kk) => leads.filter((l) => keyOf(l) === kk).length);
+      vis = ta.keys.map((kk) => leads.filter((l) => keyOf(l) === kk && isVisita(l)).length);
       if (goal) {
         metaLeads = goal.leads;
         metaVis = Math.round(goal.leads * 0.1);
@@ -390,7 +388,7 @@ function Timeline({
       }
     }
     return { labels, counts, vis, metaLeads, metaVis, metaLeadsLabel, metaVisLabel };
-  }, [leads, period, gran, goal]);
+  }, [leads, gran, goal]);
 
   const datasets = [
     {
@@ -617,10 +615,10 @@ function Outbound({ leads, labels }: { leads: Lead[]; labels: string[] }) {
   );
 }
 
-function Comparativo({ leads, period }: { leads: Lead[]; period: 'month' | 'year' }) {
-  const ta = timeAxis(leads, period);
+function Comparativo({ leads }: { leads: Lead[] }) {
+  const ta = timeAxis(leads);
   const buckets = ta.keys.map((kk) => {
-    const rows = leads.filter((l) => keyOf(l, ta.isYear) === kk);
+    const rows = leads.filter((l) => keyOf(l) === kk);
     return {
       leads: rows.length,
       citas: rows.filter(isCita).length,
@@ -633,7 +631,7 @@ function Comparativo({ leads, period }: { leads: Lead[]; period: 'month' | 'year
     <ChartBox height={300}>
       <Bar
         data={{
-          labels: ta.keys.map((kk) => (ta.isYear ? kk : monthLabel(kk))),
+          labels: ta.keys.map(monthLabel),
           datasets: [
             { label: 'Leads', data: buckets.map((b) => b.leads), backgroundColor: '#6366f133', borderColor: '#6366f1', borderWidth: 2, order: 4 },
             { label: 'Citas', data: buckets.map((b) => b.citas), backgroundColor: '#22d3ee33', borderColor: '#22d3ee', borderWidth: 2, order: 3 },
@@ -808,12 +806,12 @@ function CampType({ leads }: { leads: Lead[] }) {
   );
 }
 
-function SrcMonth({ leads, sources, period }: { leads: Lead[]; sources: string[]; period: 'month' | 'year' }) {
-  const ta = timeAxis(leads, period);
+function SrcMonth({ leads, sources }: { leads: Lead[]; sources: string[] }) {
+  const ta = timeAxis(leads);
   const datasets = sources
     .map((s, i) => ({
       label: s,
-      data: ta.keys.map((kk) => leads.filter((l) => l.source === i && keyOf(l, ta.isYear) === kk).length),
+      data: ta.keys.map((kk) => leads.filter((l) => l.source === i && keyOf(l) === kk).length),
       backgroundColor: `${sourceColor(s)}66`,
       borderColor: sourceColor(s),
       borderWidth: 1,
@@ -823,7 +821,7 @@ function SrcMonth({ leads, sources, period }: { leads: Lead[]; sources: string[]
   return (
     <ChartBox height={320}>
       <Bar
-        data={{ labels: ta.keys.map((kk) => (ta.isYear ? kk : monthLabel(kk))), datasets }}
+        data={{ labels: ta.keys.map(monthLabel), datasets }}
         options={{
           plugins: { legend: { ...legendBottom, labels: { ...legendBottom.labels, font: { size: 10 } } }, tooltip: { mode: 'index' } },
           scales: {
@@ -838,23 +836,21 @@ function SrcMonth({ leads, sources, period }: { leads: Lead[]; sources: string[]
 
 function DigitalMonth({
   leads,
-  period,
   digitalSources,
 }: {
   leads: Lead[];
-  period: 'month' | 'year';
   digitalSources: number[];
 }) {
   const set = new Set(digitalSources);
-  const ta = timeAxis(leads, period);
-  const dig = ta.keys.map((kk) => leads.filter((l) => keyOf(l, ta.isYear) === kk && set.has(l.source)).length);
-  const noDig = ta.keys.map((kk) => leads.filter((l) => keyOf(l, ta.isYear) === kk && !set.has(l.source)).length);
+  const ta = timeAxis(leads);
+  const dig = ta.keys.map((kk) => leads.filter((l) => keyOf(l) === kk && set.has(l.source)).length);
+  const noDig = ta.keys.map((kk) => leads.filter((l) => keyOf(l) === kk && !set.has(l.source)).length);
 
   return (
     <ChartBox height={320}>
       <Bar
         data={{
-          labels: ta.keys.map((kk) => (ta.isYear ? kk : monthLabel(kk))),
+          labels: ta.keys.map(monthLabel),
           datasets: [
             { label: 'Digital', data: dig, backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
             { label: 'No Digital', data: noDig, backgroundColor: '#f59e0b44', borderColor: '#f59e0b', borderWidth: 2 },
@@ -878,11 +874,9 @@ function DigitalMonth({
 function LossSection({
   leads,
   lossReasons,
-  period,
 }: {
   leads: Lead[];
   lossReasons: string[];
-  period: 'month' | 'year';
 }) {
   const [selected, setSelected] = useState<LossGroup | null>(null);
   const lost = useMemo(() => leads.filter(isPerdido), [leads]);
@@ -907,9 +901,9 @@ function LossSection({
   const totSub = subset.length;
 
   // Recuperables vs duras por mes.
-  const ta = timeAxis(leads, period);
+  const ta = timeAxis(leads);
   const rec = ta.keys.map((kk) => {
-    const mLost = lost.filter((l) => keyOf(l, ta.isYear) === kk);
+    const mLost = lost.filter((l) => keyOf(l) === kk);
     return { rec: mLost.filter((l) => l.recoverable).length, hard: mLost.filter((l) => !l.recoverable).length };
   });
 
@@ -970,7 +964,7 @@ function LossSection({
         <ChartBox height={280}>
           <Bar
             data={{
-              labels: ta.keys.map((kk) => (ta.isYear ? kk : monthLabel(kk))),
+              labels: ta.keys.map(monthLabel),
               datasets: [
                 { label: 'Recuperables', data: rec.map((x) => x.rec), backgroundColor: '#f59e0b44', borderColor: '#f59e0b', borderWidth: 2 },
                 { label: 'Duras', data: rec.map((x) => x.hard), backgroundColor: '#f43f5e44', borderColor: '#f43f5e', borderWidth: 2 },

@@ -6,7 +6,7 @@ import { PeriodFilter } from '@/components/filters/PeriodFilter';
 import { Segmented } from '@/components/ui/Segmented';
 import { STAGE_FILTER_IDX, STAGES } from '@/lib/config/negocio';
 import { defaultFilters } from '@/lib/selectors';
-import type { FilterState, Period } from '@/lib/selectors';
+import type { FilterState } from '@/lib/selectors';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import type { Meta, Status } from '@/lib/types';
 
@@ -27,11 +27,6 @@ const CANAL_SEGMENTS: Array<{ value: 'todos' | 'digital' | 'no', label: string }
   { value: 'todos', label: 'Todos' },
   { value: 'digital', label: 'Digital' },
   { value: 'no', label: 'No digital' },
-];
-
-const PERIOD_SEGMENTS: Array<{ value: Period; label: string }> = [
-  { value: 'month', label: 'Mes' },
-  { value: 'year', label: 'Año' },
 ];
 
 function FieldLabel({ children }: { children: string }) {
@@ -143,17 +138,6 @@ export function FilterBar({
             width={300}
           />
         </Field>
-
-        <div className="ml-auto">
-          <Field label="Agrupar por">
-            <Segmented
-              label="Granularidad temporal de los gráficos"
-              segments={PERIOD_SEGMENTS}
-              value={filters.period}
-              onChange={(period) => set({ period })}
-            />
-          </Field>
-        </div>
       </div>
 
       <div className="border-t border-border px-3 py-2">
@@ -161,7 +145,7 @@ export function FilterBar({
           filters={filters}
           meta={meta}
           onChange={set}
-          onClearAll={() => onChange({ ...defaultFilters, period: filters.period })}
+          onClearAll={() => onChange(defaultFilters)}
           shown={shown}
           total={total}
         />

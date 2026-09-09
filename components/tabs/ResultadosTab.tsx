@@ -133,7 +133,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Ventas, visitas y citas</h3>
-            <TrendChart leads={filtered} period={filters.period} goalCierres={goal?.cierres ?? null} />
+            <TrendChart leads={filtered} goalCierres={goal?.cierres ?? null} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Mix de fuentes en ventas</h3>
@@ -142,7 +142,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         </div>
         <div className="mt-5">
           <h3 className="mb-2 text-xs font-semibold text-dim">Ventas vs. pérdidas por periodo</h3>
-          <WinLossTrend leads={filtered} period={filters.period} goalCierres={goal?.cierres ?? null} />
+          <WinLossTrend leads={filtered} goalCierres={goal?.cierres ?? null} />
         </div>
       </Section>
 
@@ -402,16 +402,14 @@ function SalesByProject({ ventas, projects }: { ventas: Lead[]; projects: string
 
 function TrendChart({
   leads,
-  period,
   goalCierres,
 }: {
   leads: Lead[];
-  period: 'month' | 'year';
   goalCierres: number | null;
 }) {
-  const ta = timeAxis(leads, period);
+  const ta = timeAxis(leads);
   const buckets = ta.keys.map((key) => {
-    const rows = leads.filter((l) => keyOf(l, ta.isYear) === key);
+    const rows = leads.filter((l) => keyOf(l) === key);
     return {
       v: rows.filter(isVenta).length,
       vis: rows.filter(isVisita).length,
@@ -423,7 +421,7 @@ function TrendChart({
     <ChartBox height={280}>
       <MixedChart
         data={{
-          labels: ta.keys.map((k) => (ta.isYear ? k : monthLabel(k))),
+          labels: ta.keys.map(monthLabel),
           datasets: [
             { type: 'bar' as const, label: 'Ventas', data: buckets.map((b) => b.v), backgroundColor: '#c9a96e44', borderColor: '#c9a96e', borderWidth: 2, order: 3 },
             { type: 'line' as const, label: 'Visitas', data: buckets.map((b) => b.vis), borderColor: '#4ade80', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3, order: 1 },
@@ -492,16 +490,14 @@ function SourceMix({ ventas, sources }: { ventas: Lead[]; sources: string[] }) {
 
 function WinLossTrend({
   leads,
-  period,
   goalCierres,
 }: {
   leads: Lead[];
-  period: 'month' | 'year';
   goalCierres: number | null;
 }) {
-  const ta = timeAxis(leads, period);
+  const ta = timeAxis(leads);
   const buckets = ta.keys.map((key) => {
-    const rows = leads.filter((l) => keyOf(l, ta.isYear) === key);
+    const rows = leads.filter((l) => keyOf(l) === key);
     return { v: rows.filter(isVenta).length, p: rows.filter(isPerdido).length };
   });
 
@@ -509,7 +505,7 @@ function WinLossTrend({
     <ChartBox height={300}>
       <MixedChart
         data={{
-          labels: ta.keys.map((k) => (ta.isYear ? k : monthLabel(k))),
+          labels: ta.keys.map(monthLabel),
           datasets: [
             { type: 'bar' as const, label: 'Perdidos', data: buckets.map((b) => b.p), backgroundColor: '#f43f5e44', borderColor: '#f43f5e', borderWidth: 2, order: 3, yAxisID: 'y' },
             { type: 'line' as const, label: 'Ventas', data: buckets.map((b) => b.v), borderColor: '#4ade80', backgroundColor: '#4ade8015', fill: false, borderWidth: 2.5, pointRadius: 5, pointBackgroundColor: '#4ade80', pointBorderColor: '#fff', pointBorderWidth: 2, tension: 0.3, order: 1, yAxisID: 'y1' },
