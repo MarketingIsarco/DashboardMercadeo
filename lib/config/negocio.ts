@@ -228,7 +228,7 @@ export const BOLSA_LABEL: Record<Bolsa, string> = {
 
 /** Meses con presupuesto cargado, en orden cronológico. */
 export const INVERSION_MESES = [
-  '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07',
+  '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08',
 ];
 
 export interface Rubro {
@@ -273,65 +273,290 @@ export const RUBROS: Rubro[] = [
  */
 export const INVERSION_RUBROS: Record<Bolsa, number[][]> = {
   inari: [
-    /*  0 Publicidad Digital */ [3_000_000, 2_800_000, 200_000, 5_600_000, 3_400_000, 5_500_000, 4_415_348],
-    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0],
-    /*  2 CRM-WhatsApp       */ [0, 85_132, 84_306, 283_615, 0, 0, 76_464],
-    /*  3 Banderas           */ [0, 3_478_370, 606_900, 0, 0, 0, 606_900],
-    /*  4 Valla              */ [0, 0, 890_477, 0, 306_425, 0, 4_998_000],
-    /*  5 Volantes           */ [0, 1_391_110, 119_000, 142_800, 1_582_700, 0, 756_840],
-    /*  6 Brochures          */ [0, 0, 440_300, 0, 0, 0, 0],
-    /*  7 Eventos            */ [0, 0, 1_326_255, 0, 0, 0, 684_250],
-    /*  8 Chat IA            */ [1_900_947, 1_565_253, 1_530_537, 1_494_080, 1_081_909, 902_524, 2_000_000],
-    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 61_600],
-    /* 10 Tour Virtuales     */ [9_508_100, 0, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [272_462, 971_778, 993_849, 0, 2_204_910, 1_000_500, 0],
-    /* 14 PR                 */ [73_800, 0, 0, 0, 300_000, 1_785_000, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [3_000_000, 2_800_000, 200_000, 5_600_000, 3_400_000, 5_500_000, 4_415_348, 5_100_000],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [0, 85_132, 84_306, 283_615, 0, 0, 76_464, 0],
+    /*  3 Banderas           */ [0, 3_478_370, 606_900, 0, 0, 0, 606_900, 0],
+    /*  4 Valla              */ [0, 0, 890_477, 0, 306_425, 0, 4_998_000, 0],
+    /*  5 Volantes           */ [0, 1_391_110, 119_000, 142_800, 1_582_700, 0, 756_840, 0],
+    /*  6 Brochures          */ [0, 0, 440_300, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [0, 0, 1_326_255, 0, 0, 0, 684_250, 0],
+    /*  8 Chat IA            */ [1_900_947, 1_565_253, 1_530_537, 1_494_080, 1_081_909, 902_524, 2_000_000, 375_000],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 61_600, 0],
+    /* 10 Tour Virtuales     */ [9_508_100, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [272_462, 971_778, 993_849, 0, 2_204_910, 1_000_500, 0, 3_795_022],
+    /* 14 PR                 */ [73_800, 0, 0, 0, 300_000, 1_785_000, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0],
   ],
   tng: [
-    /*  0 Publicidad Digital */ [3_000_000, 3_000_000, 3_000_000, 2_987_520, 2_512_480, 3_642_000, 4_000_000],
-    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0],
-    /*  2 CRM-WhatsApp       */ [48_239, 67_947, 77_237, 236_054, 0, 0, 94_501],
-    /*  3 Banderas           */ [0, 0, 0, 1_213_800, 0, 0, 1_213_800],
-    /*  4 Valla              */ [0, 676_872, 0, 0, 0, 0, 0],
-    /*  5 Volantes           */ [0, 198_730, 404_600, 353_351, 2_084_788, 557_289, 351_050],
-    /*  6 Brochures          */ [0, 202_300, 0, 440_300, 0, 0, 0],
-    /*  7 Eventos            */ [0, 1_140_568, 1_198_092, 0, 2_014_200, 0, 684_250],
-    /*  8 Chat IA            */ [989_687, 937_981, 1_033_922, 890_121, 1_264_266, 813_284, 2_000_000],
-    /*  9 Página Web         */ [0, 0, 3_427_388, 3_374_388, 0, 0, 0],
-    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [272_462, 0, 0, 0, 0, 0, 0],
-    /* 14 PR                 */ [0, 0, 0, 0, 0, 0, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [3_000_000, 3_000_000, 3_000_000, 2_987_520, 2_512_480, 3_642_000, 2_580_001, 0],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [48_239, 67_947, 77_236, 236_054, 0, 0, 94_501, 0],
+    /*  3 Banderas           */ [0, 0, 0, 1_213_800, 0, 0, 1_213_800, 0],
+    /*  4 Valla              */ [0, 676_872, 0, 0, 0, 0, 0, 2_499_000],
+    /*  5 Volantes           */ [0, 198_730, 404_600, 353_351, 2_084_788, 557_289, 351_050, 0],
+    /*  6 Brochures          */ [0, 202_300, 0, 440_300, 0, 0, 0, 0],
+    /*  7 Eventos            */ [0, 1_140_568, 1_198_092, 0, 2_014_200, 0, 684_250, 0],
+    /*  8 Chat IA            */ [989_687, 937_981, 1_033_922, 890_121, 1_264_266, 813_284, 2_000_000, 375_000],
+    /*  9 Página Web         */ [0, 0, 3_427_388, 3_374_388, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [272_462, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0],
   ],
   // Agregado de Coworking + Depósitos + Op. Terceros + Locales + Oficinas.
+  //
+  // Julio trae un valor **negativo** en Portales Inmobiliarios (−$792.362):
+  // es la reversión contable de cargos de portales que el P&G registra en el
+  // mes. Se carga tal cual viene del P&G — ajustarlo a cero haría que el
+  // dashboard dejara de cuadrar contra el estado de resultados, que es la
+  // única razón por la que esta matriz existe.
   inm: [
-    /*  0 Publicidad Digital */ [870_622, 892_360, 0, 1_015_977, 0, 293_757, 619_947],
-    /*  1 Portales           */ [110_000, 1_332_445, 1_010_470, 0, 1_345_940, 123_495, 0],
-    /*  2 CRM-WhatsApp       */ [7_590, 5_125, 5_070, 0, 0, 14_735, 0],
-    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0],
-    /*  4 Valla              */ [0, 0, 250_000, 1_704_000, 651_750, 1_116_000, 0],
-    /*  5 Volantes           */ [0, 244_986, 870_000, 0, 0, 163_324, 0],
-    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0],
-    /*  7 Eventos            */ [60_000, 0, 0, 0, 0, 0, 0],
-    /*  8 Chat IA            */ [0, 1_117_545, 295_470, 527_890, 281_690, 402_040, 0],
-    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0],
-    /* 10 Tour Virtuales     */ [0, 1_200_000, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0],
-    /* 14 PR                 */ [754_625, 754_625, 377_310, 377_310, 0, 0, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [870_622, 892_360, 0, 1_015_977, 0, 293_757, 2_675_782, 473_603],
+    /*  1 Portales           */ [110_000, 1_332_445, 1_010_469, 0, 1_345_940, 123_495, -792_362, 975_379],
+    /*  2 CRM-WhatsApp       */ [7_588, 5_125, 5_071, 0, 0, 14_733, 24_357, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 250_000, 1_704_000, 651_750, 1_116_000, 86_000, 0],
+    /*  5 Volantes           */ [0, 244_986, 870_000, 0, 0, 163_324, 0, 81_662],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [60_000, 0, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 1_117_543, 295_468, 527_891, 281_689, 402_042, 0, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 1_200_000, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [754_624, 754_624, 377_312, 377_312, 0, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0],
   ],
 };
 
 /** Colores de la partición digital / no-digital. Se usan en chart y tabla. */
 export const DIGITAL_COLOR = '#60a5fa';
 export const NO_DIGITAL_COLOR = '#fb923c';
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * BUYER PERSONA — campos de perfilamiento del CRM
+ *
+ * Son campos personalizados de Pipedrive que el asesor diligencia a mano en la
+ * sala. Se resuelven **por nombre**, no por hash: los hashes cambian si alguien
+ * recrea el campo, y un hash muerto deja el capítulo en blanco sin avisar. Un
+ * campo que no aparezca en `dealFields` se marca `ausente` y el capítulo lo
+ * dibuja como tarjeta apagada con el nombre que buscó, para que se vea cuál
+ * hay que corregir.
+ *
+ * ⚠️ El sesgo que hay que tener presente al leer todo este capítulo: el asesor
+ * perfila al lead que le interesa. Con índices de diligenciamiento bajos, esto
+ * describe a quien el asesor decidió perfilar, no a quien consulta.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+/** Cómo se dibuja un campo de perfilamiento. */
+export type PerfilViz =
+  /** Pocas categorías sin orden natural → dona. */
+  | 'torta'
+  /** Categorías con orden propio (edad, hijos) → barra vertical en ese orden. */
+  | 'barra'
+  /** Texto libre con cola larga (localidad, profesión) → barra horizontal top-N. */
+  | 'ranking'
+  /** Numérico continuo → histograma sobre `buckets`. */
+  | 'histograma';
+
+/** Eje de lectura del perfil. */
+export type PerfilGrupo = 'demo' | 'psico' | 'econ';
+
+export const PERFIL_GRUPO_LABEL: Record<PerfilGrupo, string> = {
+  demo: 'Demográfico',
+  psico: 'Psicográfico',
+  econ: 'Económico',
+};
+
+export interface PerfilBucket {
+  label: string;
+  /** Límite inferior inclusivo; `null` = sin piso. */
+  min: number | null;
+  /** Límite superior exclusivo; `null` = sin techo. */
+  max: number | null;
+}
+
+export interface PerfilCampo {
+  label: string;
+  /**
+   * Nombres aceptados del campo en Pipedrive. Se comparan normalizados (sin
+   * tildes ni mayúsculas), así que basta con listar las variantes de redacción.
+   * El primero es el que se le muestra a Mercadeo cuando el campo no aparece.
+   */
+  alias: string[];
+  viz: PerfilViz;
+  grupo: PerfilGrupo;
+  /**
+   * Orden canónico de las categorías. Los valores que el CRM traiga fuera de
+   * esta lista se dibujan después, ordenados por frecuencia.
+   */
+  orden?: string[];
+  /** Cuántas categorías muestra un `ranking` antes de agrupar en "Otros". */
+  topN?: number;
+  /** Cortes del histograma, sólo para `viz: 'histograma'`. */
+  buckets?: PerfilBucket[];
+  /**
+   * `true` cuando el 0 significa "sin diligenciar", no "cero".
+   *
+   * Presupuesto y Área exportan 0 por defecto en casi toda la base: contarlos
+   * como diligenciados inflaría la cobertura con miles de ceros que nadie
+   * escribió.
+   */
+  ceroEsVacio?: boolean;
+}
+
+/**
+ * Los 13 campos del capítulo. El orden fija los índices de `Lead.perfil`, así
+ * que insertar uno en la mitad invalida los datos ya servidos: agregar al final.
+ */
+export const PERFIL_CAMPOS: PerfilCampo[] = [
+  { label: 'Género', alias: ['Genero', 'Género'], viz: 'torta', grupo: 'demo', orden: ['Masculino', 'Femenino'] },
+  {
+    label: 'Edad',
+    alias: ['Edad'],
+    viz: 'barra',
+    grupo: 'demo',
+    orden: ['18 a 25', '26 a 35', '36 a 45', '46 a 55', '56 a 65', 'Más de 66'],
+  },
+  {
+    label: 'Interés',
+    alias: ['Interés', 'Interes'],
+    viz: 'torta',
+    grupo: 'psico',
+    orden: ['Habitar', 'Invertir', 'Invertir, Habitar'],
+  },
+  {
+    label: 'Estado civil',
+    alias: ['Estado civil'],
+    viz: 'torta',
+    grupo: 'demo',
+    orden: ['Soltera/o', 'Casada/o', 'Unión Libre', 'Divorciada/o', 'Viuda/o', 'No Informa'],
+  },
+  { label: 'Localidad', alias: ['Localidad'], viz: 'ranking', grupo: 'demo', topN: 12 },
+  { label: 'Profesión', alias: ['Profesión', 'Profesion'], viz: 'ranking', grupo: 'econ', topN: 12 },
+  {
+    label: 'Número de hijos',
+    alias: ['Número de hijos', 'Numero de hijos'],
+    viz: 'barra',
+    grupo: 'demo',
+    orden: ['0', '1', '2', '3', '4'],
+  },
+  {
+    label: 'Mascotas',
+    alias: ['Mascotas'],
+    viz: 'torta',
+    grupo: 'psico',
+    orden: ['Si tiene', 'No tiene', 'No responde'],
+  },
+  {
+    label: 'Número de vehículos',
+    alias: ['Número de vehiculos', 'Numero de vehiculos', 'Número de vehículos'],
+    viz: 'barra',
+    grupo: 'econ',
+    orden: ['0', '1', '2', '3'],
+  },
+  {
+    label: 'Entrega con acabados',
+    alias: ['Entrega con Acabados (Si/No)', 'Entrega con acabados', 'Entrega con Acabados'],
+    viz: 'torta',
+    grupo: 'psico',
+    orden: ['Si', 'No'],
+  },
+  {
+    // No lo pidió Mercadeo en la primera lista, pero es la variable económica
+    // que decide tipología en un producto premium y ya está en el CRM.
+    label: 'Ingresos mensuales',
+    alias: ['Ingresos mensuales'],
+    viz: 'barra',
+    grupo: 'econ',
+    orden: [
+      '1.3 a 3', '3.1 a 5', '5.1 a 7', '7.1 a 10', '10.1 a 13', '13.1 a 15',
+      '15.1 a 18', '18.1 a 20', '20.1 a 25', '25.1 a 30', '30.1 a 40',
+      '40.1 a 50', 'Más 50',
+    ],
+  },
+  {
+    label: 'Presupuesto apartamento',
+    alias: ['Presupuesto Apartamento', 'Presupuesto apartamento'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    buckets: [
+      { label: 'Menos de $500M', min: null, max: 500_000_000 },
+      { label: '$500M a $1.000M', min: 500_000_000, max: 1_000_000_000 },
+      { label: '$1.000M a $1.500M', min: 1_000_000_000, max: 1_500_000_000 },
+      { label: '$1.500M a $2.000M', min: 1_500_000_000, max: 2_000_000_000 },
+      { label: 'Más de $2.000M', min: 2_000_000_000, max: null },
+    ],
+  },
+  {
+    label: 'Área requerida',
+    alias: ['Área Requerida', 'Area Requerida', 'Área requerida'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    buckets: [
+      { label: 'Hasta 50 m²', min: null, max: 51 },
+      { label: '51 a 70 m²', min: 51, max: 71 },
+      { label: '71 a 90 m²', min: 71, max: 91 },
+      { label: '91 a 110 m²', min: 91, max: 111 },
+      { label: 'Más de 110 m²', min: 111, max: null },
+    ],
+  },
+];
+
+/** Índices en `PERFIL_CAMPOS`, para no escribir números mágicos. */
+export const PERFIL_GENERO = 0;
+export const PERFIL_EDAD = 1;
+export const PERFIL_INTERES = 2;
+export const PERFIL_ESTADO_CIVIL = 3;
+export const PERFIL_LOCALIDAD = 4;
+export const PERFIL_PROFESION = 5;
+export const PERFIL_HIJOS = 6;
+export const PERFIL_MASCOTAS = 7;
+export const PERFIL_VEHICULOS = 8;
+export const PERFIL_ACABADOS = 9;
+export const PERFIL_INGRESOS = 10;
+export const PERFIL_PRESUPUESTO = 11;
+export const PERFIL_AREA = 12;
+
+/**
+ * Campos que tienen que estar los cuatro para que el trato cuente como
+ * "núcleo completo".
+ *
+ * Es la muestra sobre la que se puede cruzar dos variables sin inventar: un
+ * trato con género pero sin edad no sirve para decir "hombres de 36 a 45".
+ */
+export const PERFIL_NUCLEO = [PERFIL_GENERO, PERFIL_EDAD, PERFIL_INTERES, PERFIL_LOCALIDAD];
+
+/**
+ * Semáforo de suficiencia sobre el número de tratos con núcleo completo.
+ * Debajo de 1.000 no se llama buyer persona: se llama perfil preliminar.
+ */
+export const PERFIL_UMBRALES = { descriptivo: 400, accionable: 1_000 } as const;
+
+/**
+ * Debajo de este índice de perfilamiento, el perfil describe a quien el asesor
+ * decidió perfilar y no a quien consulta. El capítulo lo dice en pantalla.
+ */
+export const PERFIL_SESGO_PCT = 40;
+
+/** Paleta de las categorías de perfil. 12 tonos, se repite si hacen falta más. */
+export const PERFIL_COLORS = [
+  '#c9a96e', '#6366f1', '#22d3ee', '#f59e0b', '#8b5cf6', '#4ade80',
+  '#f43f5e', '#0ea5e9', '#fb923c', '#a3e635', '#e879f9', '#64748b',
+];
+
+export const SIN_PERFIL = 'Sin diligenciar';
+export const SIN_PERFIL_COLOR = '#9090a8';
 
 export interface Goal {
   leads: number;

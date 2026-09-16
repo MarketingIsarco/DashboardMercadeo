@@ -79,6 +79,25 @@ export interface Lead {
   firstContactHours: number | null;
 
   /**
+   * Perfilamiento del trato — los campos del capítulo 07 (Buyer Persona), en
+   * el orden de `PERFIL_CAMPOS`.
+   *
+   * Dos convenciones en un solo arreglo, para no mandar trece `null` por trato:
+   *
+   * · Campos categóricos → **índice** en `Meta.perfil[i].values`.
+   * · Campos `histograma` (presupuesto, área) → el **valor crudo** en COP o m².
+   *   Son continuos y el corte en rangos se hace en el cliente, para poder
+   *   moverlo sin volver a pedir los datos.
+   * · En ambos casos, `-1` = sin diligenciar.
+   *
+   * Llega **vacío** (`[]`) cuando el trato no tiene ningún campo diligenciado,
+   * que hoy es ~9 de cada 10. Mandar trece `-1` por cada uno sumaba cerca de un
+   * mega de JSON que nadie lee. Quien lo consuma tiene que tolerar el arreglo
+   * vacío — para eso está `perfilVal` en `lib/buyer.ts`.
+   */
+  perfil: number[];
+
+  /**
    * Índice en `Meta.advisors` de quien **creó** la primera actividad del trato;
    * `-1` cuando no hay ninguna.
    *
@@ -185,6 +204,27 @@ export interface Meta {
   lossReasons: string[];
   /** Indices into `sources` that count as paid/organic digital traffic. */
   digitalSources: number[];
+  /**
+   * Un elemento por campo de `PERFIL_CAMPOS`, en el mismo orden. Los índices de
+   * `Lead.perfil` apuntan a `values`, así que los dos viajan siempre juntos.
+   */
+  perfil: PerfilCampoMeta[];
+}
+
+/** Valores que el CRM trae hoy para un campo de perfilamiento. */
+export interface PerfilCampoMeta {
+  /**
+   * Valores distintos hallados en la carga, con el orden canónico del campo
+   * primero y lo que el CRM haya traído de más después. Vacío en los campos
+   * numéricos, que no tienen categorías.
+   */
+  values: string[];
+  /**
+   * `true` cuando el campo no existe hoy en Pipedrive con ninguno de sus
+   * alias. El capítulo lo dibuja apagado en vez de mostrar una gráfica vacía
+   * que se leería como "nadie lo diligencia".
+   */
+  ausente: boolean;
 }
 
 export interface DashboardData {

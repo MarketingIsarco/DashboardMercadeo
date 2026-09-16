@@ -20,6 +20,14 @@ import {
   NO_DIGITAL_COLOR,
   OUTBOUND_EXCLUDED_LABELS,
   PAID_SOURCES,
+  PERFIL_CAMPOS,
+  PERFIL_COLORS,
+  PERFIL_EDAD,
+  PERFIL_GRUPO_LABEL,
+  PERFIL_INTERES,
+  PERFIL_PRESUPUESTO,
+  PERFIL_SESGO_PCT,
+  PERFIL_AREA,
   RUBROS,
   SIN_ETIQUETA,
   SIN_MOTIVO,
@@ -31,6 +39,15 @@ import {
 } from '@/lib/config/negocio';
 import type { Bolsa } from '@/lib/config/negocio';
 import { fmtCOP, monthLabel, normalize, pct, sourceIndices } from '@/lib/format';
+import {
+  cobertura,
+  coberturaMensual,
+  conversionPorCampo,
+  cruce,
+  distribucion,
+  suficiencia,
+} from '@/lib/buyer';
+import type { Distribucion } from '@/lib/buyer';
 import {
   bolsasActivas,
   matrizRubros,
@@ -141,6 +158,14 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         sub="Efectividad de las campañas de reactivación y recuperación, por etiqueta del trato"
       >
         <Outbound leads={filtered} labels={meta.labels} />
+      </Section>
+
+      {/* 07 · Buyer Persona */}
+      <Section
+        title="07 · Buyer Persona"
+        sub="Quién es el cliente que estamos registrando en el embudo · demográfico, psicográfico y económico"
+      >
+        <BuyerPersona filtered={filtered} meta={meta} />
       </Section>
     </>
   );
@@ -1381,6 +1406,527 @@ function RubrosTable({ bolsas, months }: { bolsas: Bolsa[]; months: string[] }) 
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 07 · Buyer Persona
+//
+// Quién es el cliente que estamos registrando en cada embudo, según los campos
+// de perfilamiento que el asesor diligencia en sala. Todo el capítulo respeta
+// la barra de filtros: cambiar Proyecto o Periodo arriba recalcula cada gráfica.
+//
+// Tres advertencias que el capítulo lleva en pantalla, porque sin ellas los
+// porcentajes se vuelven dogma interno:
+//
+//   1. El denominador nunca es "los leads": es "los leads con ese campo
+//      diligenciado". Cada gráfica muestra su propio n.
+//   2. Debajo de 1.000 tratos con núcleo completo esto no es un buyer persona,
+//      es un perfil preliminar — el mismo umbral del informe mensual.
+//   3. Con índices de perfilamiento bajos hay sesgo de selección: el asesor
+//      perfila al lead que le interesa, así que el perfil describe a quien el
+//      asesor decidió perfilar, no a quien consulta por el proyecto.
+// ─────────────────────────────────────────────────────────────────────
+function BuyerPersona({ filtered, meta }: { filtered: Lead[]; meta: Meta }) {
+  const cob = useMemo(() => cobertura(filtered, meta), [filtered, meta]);
+  const suf = useMemo(() => suficiencia(cob.nucleo), [cob.nucleo]);
+  const dists = useMemo(
+    () => PERFIL_CAMPOS.map((_, i) => distribucion(filtered, meta, i)),
+    [filtered, meta],
+  );
+
+  const sesgo = cob.indice < PERFIL_SESGO_PCT && cob.perfilados > 0;
+
+  return (
+    <div>
+      <KpiGrid>
+        <Kpi label="Leads en el recorte" value={cob.total.toLocaleString('es-CO')} meta="denominador de la cobertura" />
+        <Kpi
+          label="Perfilados"
+          value={cob.perfilados.toLocaleString('es-CO')}
+          meta="con al menos un campo diligenciado"
+        />
+        <Kpi
+          label="Índice de perfilamiento"
+          value={`${cob.indice.toFixed(1)}%`}
+          meta={`${cob.perfilados} de ${cob.total}`}
+        />
+        <Kpi
+          label="Núcleo completo"
+          value={cob.nucleo.toLocaleString('es-CO')}
+          meta="género + edad + interés + localidad"
+        />
+        <Kpi
+          label="Suficiencia"
+          value={<span style={{ color: suf.color }}>{suf.etiqueta}</span>}
+          size="sm"
+          meta={suf.mensaje}
+        />
+        <Kpi
+          label="Campos activos"
+          value={`${PERFIL_CAMPOS.length - cob.ausentes.length} / ${PERFIL_CAMPOS.length}`}
+          meta={cob.ausentes.length ? 'hay campos que no existen en el CRM' : 'todos resueltos en Pipedrive'}
+        />
+      </KpiGrid>
+
+      {sesgo ? (
+        <p className="mt-3 rounded-md border border-[#f59e0b55] bg-[#f59e0b14] px-3 py-2 text-2xs leading-snug text-dim">
+          <b>Sesgo de selección.</b> Con {cob.indice.toFixed(1)}% de perfilamiento, lo que sigue describe a quien el
+          asesor <i>decidió</i> perfilar, no a quien consulta por el proyecto. Sirve para orientar hipótesis de pauta,
+          no para cerrar una definición de público.
+        </p>
+      ) : null}
+
+      {cob.ausentes.length ? (
+        <p className="mt-2 rounded-md border border-[#f43f5e55] bg-[#f43f5e14] px-3 py-2 text-2xs leading-snug text-dim">
+          <b>Campos no encontrados en Pipedrive:</b>{' '}
+          {cob.ausentes.map((i) => PERFIL_CAMPOS[i].label).join(', ')}. Suele significar que el campo se borró y se
+          volvió a crear en el CRM con otro nombre. Ajusta los <code>alias</code> de <code>PERFIL_CAMPOS</code> en
+          <code> lib/config/negocio.ts</code>.
+        </p>
+      ) : null}
+
+      <div className="mt-6">
+        <h3 className="mb-2 text-xs font-semibold text-dim">Evolución del perfilamiento</h3>
+        <p className="mb-2 text-2xs text-muted">
+          La línea se lee contra las barras: el patrón conocido es que cuando entran más leads el equipo deja de
+          perfilar. Un índice que cae en el mes de mayor volumen no es un problema de disciplina, es de capacidad.
+        </p>
+        <PerfilMensual leads={filtered} />
+      </div>
+
+      <div className="mt-6">
+        <h3 className="mb-2 text-xs font-semibold text-dim">Perfil por variable</h3>
+        <p className="mb-3 text-2xs text-muted">
+          Cada tarjeta muestra su propio <b>n</b>: el porcentaje se calcula sobre los tratos que tienen ese campo
+          diligenciado, no sobre el total de leads del recorte.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {dists.map((d) => (
+            <PerfilCard key={d.campo} dist={d} />
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <h3 className="mb-2 text-xs font-semibold text-dim">Producto: presupuesto vs área requerida</h3>
+        <p className="mb-2 text-2xs text-muted">
+          El único cruce que decide tipología. Sólo entran los tratos que tienen las dos cifras, así que su n es
+          bastante menor que el de cada variable por separado.
+        </p>
+        <CruceMatriz leads={filtered} meta={meta} fila={PERFIL_PRESUPUESTO} col={PERFIL_AREA} />
+      </div>
+
+      <div className="mt-8">
+        <h3 className="mb-2 text-xs font-semibold text-dim">Mensaje: interés por rango de edad</h3>
+        <p className="mb-2 text-2xs text-muted">
+          Habitar e invertir no se le hablan igual a la misma persona. Esto dice qué proporción de cada rango de edad
+          llega buscando vivienda y cuál llega buscando rentabilidad.
+        </p>
+        <CruceBarras leads={filtered} meta={meta} fila={PERFIL_EDAD} col={PERFIL_INTERES} />
+      </div>
+
+      <div className="mt-8">
+        <ConversionPerfil leads={filtered} meta={meta} />
+      </div>
+    </div>
+  );
+}
+
+/** Barras de leads + línea del índice de perfilamiento, mes a mes. */
+function PerfilMensual({ leads }: { leads: Lead[] }) {
+  const meses = useMemo(() => coberturaMensual(leads), [leads]);
+
+  if (!meses.length) return <p className="text-xs text-muted">Sin leads para el filtro actual.</p>;
+
+  const data: MixedData = {
+    labels: meses.map((m) => monthLabel(m.month)),
+    datasets: [
+      {
+        type: 'bar' as const,
+        label: 'Leads',
+        data: meses.map((m) => m.total),
+        backgroundColor: '#6366f166',
+        yAxisID: 'y',
+        order: 2,
+      },
+      {
+        type: 'bar' as const,
+        label: 'Perfilados',
+        data: meses.map((m) => m.perfilados),
+        backgroundColor: `${PERFIL_COLORS[0]}cc`,
+        yAxisID: 'y',
+        order: 2,
+      },
+      {
+        type: 'line' as const,
+        label: 'Índice de perfilamiento',
+        data: meses.map((m) => Number(m.indice.toFixed(1))),
+        borderColor: '#f43f5e',
+        backgroundColor: 'rgba(244,63,94,0.12)',
+        yAxisID: 'y2',
+        tension: 0.3,
+        pointRadius: 4,
+        order: 1,
+      },
+    ],
+  };
+
+  const options: MixedOptions = {
+    plugins: {
+      legend: legendBottom,
+      tooltip: {
+        callbacks: {
+          label: (ctx) =>
+            ctx.dataset.yAxisID === 'y2'
+              ? ` Índice: ${(ctx.raw as number).toFixed(1)}%`
+              : ` ${ctx.dataset.label}: ${ctx.raw as number}`,
+        },
+      },
+    },
+    scales: {
+      x: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+      y: {
+        position: 'left',
+        beginAtZero: true,
+        grid: { color: GRID_COLOR },
+        ticks: { color: TICK_COLOR },
+        title: { display: true, text: 'Leads', color: TICK_COLOR, font: { size: 10 } },
+      },
+      y2: {
+        type: 'linear',
+        position: 'right',
+        beginAtZero: true,
+        grid: { display: false },
+        ticks: { color: '#f43f5e', callback: (v) => `${v}%` },
+        title: { display: true, text: 'Perfilamiento', color: '#f43f5e', font: { size: 10 } },
+      },
+    },
+  };
+
+  return (
+    <ChartBox height={300}>
+      <MixedChart data={data} options={options} />
+    </ChartBox>
+  );
+}
+
+/**
+ * Una variable del perfil.
+ *
+ * La `viz` del campo decide la gráfica, y no es decoración: una dona con doce
+ * localidades es ilegible, y una barra de dos categorías desperdicia la tarjeta.
+ */
+function PerfilCard({ dist }: { dist: Distribucion }) {
+  if (dist.ausente) {
+    return (
+      <div className="rounded-lg border border-dashed border-[#d7dbe8] p-4">
+        <div className="text-xs font-semibold text-dim">{dist.label}</div>
+        <p className="mt-2 text-2xs leading-snug text-muted">
+          El campo no existe hoy en Pipedrive con ninguno de los nombres que el dashboard busca.
+        </p>
+      </div>
+    );
+  }
+
+  if (!dist.conDato) {
+    return (
+      <div className="rounded-lg border border-[#e8eaf2] p-4">
+        <div className="text-xs font-semibold text-dim">{dist.label}</div>
+        <p className="mt-2 text-2xs leading-snug text-muted">
+          Ningún trato del recorte tiene este campo diligenciado.
+        </p>
+      </div>
+    );
+  }
+
+  const colors = dist.items.map((_, i) => PERFIL_COLORS[i % PERFIL_COLORS.length]);
+  const esDona = dist.viz === 'torta';
+  const esRanking = dist.viz === 'ranking';
+
+  return (
+    <div className="rounded-lg border border-[#e8eaf2] p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-semibold text-dim">{dist.label}</span>
+        <span className="text-2xs text-muted">n = {dist.conDato.toLocaleString('es-CO')}</span>
+      </div>
+      <p className="mb-2 mt-0.5 text-2xs text-muted">
+        {PERFIL_GRUPO_LABEL[dist.grupo]} · {pct(dist.conDato, dist.conDato + dist.sinDato)}% de cobertura
+        {dist.mediana !== undefined
+          ? ` · mediana ${dist.campo === PERFIL_PRESUPUESTO ? fmtCOP(dist.mediana) : `${dist.mediana} m²`}`
+          : ''}
+      </p>
+
+      <ChartBox height={esRanking ? 260 : 220}>
+        {esDona ? (
+          <Doughnut
+            data={{
+              labels: dist.items.map((i) => i.label),
+              datasets: [
+                {
+                  data: dist.items.map((i) => i.n),
+                  backgroundColor: colors.map((c) => `${c}cc`),
+                  borderColor: '#fff',
+                  borderWidth: 2,
+                },
+              ],
+            }}
+            options={{
+              plugins: {
+                legend: legendBottom,
+                tooltip: {
+                  callbacks: {
+                    label: (c) => `${c.label}: ${c.raw as number} (${pct(c.raw as number, dist.conDato)}%)`,
+                  },
+                },
+              },
+            }}
+          />
+        ) : (
+          <Bar
+            data={{
+              labels: dist.items.map((i) => i.label),
+              datasets: [
+                {
+                  label: dist.label,
+                  data: dist.items.map((i) => i.n),
+                  backgroundColor: esRanking ? `${PERFIL_COLORS[1]}cc` : colors.map((c) => `${c}cc`),
+                  borderRadius: 3,
+                },
+              ],
+            }}
+            options={{
+              // El ranking va horizontal: "Suba" y "Chapinero" no caben de pie
+              // en un eje de 12 categorías sin quedar en diagonal.
+              indexAxis: esRanking ? ('y' as const) : ('x' as const),
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    // En barra horizontal el valor está en `x`; en vertical, en
+                    // `y`. Chart.js tipa ambos como anulables, así que `?? 0`.
+                    label: (c) => {
+                      const n = (esRanking ? c.parsed.x : c.parsed.y) ?? 0;
+                      return ` ${n} (${pct(n, dist.conDato)}%)`;
+                    },
+                  },
+                },
+              },
+              scales: {
+                x: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR }, beginAtZero: true },
+                y: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR, font: { size: 10 } }, beginAtZero: true },
+              },
+            }}
+          />
+        )}
+      </ChartBox>
+    </div>
+  );
+}
+
+/** Matriz de conteos de dos campos, con la celda tintada por intensidad. */
+function CruceMatriz({
+  leads,
+  meta,
+  fila,
+  col,
+}: {
+  leads: Lead[];
+  meta: Meta;
+  fila: number;
+  col: number;
+}) {
+  const c = useMemo(() => cruce(leads, meta, fila, col), [leads, meta, fila, col]);
+
+  if (!c.total) {
+    return (
+      <p className="text-xs text-muted">
+        Ningún trato del recorte tiene diligenciados {PERFIL_CAMPOS[fila].label} y {PERFIL_CAMPOS[col].label} al mismo
+        tiempo.
+      </p>
+    );
+  }
+
+  const max = Math.max(...c.celdas.flat());
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="dt">
+        <thead>
+          <tr>
+            <th>
+              {PERFIL_CAMPOS[fila].label} ↓ / {PERFIL_CAMPOS[col].label} →
+            </th>
+            {c.columnas.map((cc) => (
+              <th key={cc} style={{ textAlign: 'right' }}>
+                {cc}
+              </th>
+            ))}
+            <th style={{ textAlign: 'right' }}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {c.filas.map((f, i) => (
+            <tr key={f}>
+              <td>{f}</td>
+              {c.celdas[i].map((n, j) => (
+                <td
+                  key={c.columnas[j]}
+                  style={{
+                    textAlign: 'right',
+                    // La intensidad sale del máximo de la matriz, no del total:
+                    // con 40 celdas casi todas quedarían transparentes.
+                    background: n ? `rgba(201,169,110,${(n / max) * 0.55 + 0.05})` : undefined,
+                    fontWeight: n === max ? 700 : undefined,
+                  }}
+                >
+                  {n || '–'}
+                </td>
+              ))}
+              <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                {c.celdas[i].reduce((a, b) => a + b, 0)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-2xs text-muted">n = {c.total} tratos con ambas cifras diligenciadas.</p>
+    </div>
+  );
+}
+
+/** El campo `col` repartido dentro de cada categoría de `fila`, en barras apiladas al 100%. */
+function CruceBarras({
+  leads,
+  meta,
+  fila,
+  col,
+}: {
+  leads: Lead[];
+  meta: Meta;
+  fila: number;
+  col: number;
+}) {
+  const c = useMemo(() => cruce(leads, meta, fila, col), [leads, meta, fila, col]);
+
+  if (!c.total) {
+    return (
+      <p className="text-xs text-muted">
+        Ningún trato del recorte tiene diligenciados {PERFIL_CAMPOS[fila].label} y {PERFIL_CAMPOS[col].label} al mismo
+        tiempo.
+      </p>
+    );
+  }
+
+  const totalesFila = c.celdas.map((r) => r.reduce((a, b) => a + b, 0));
+
+  return (
+    <>
+      <ChartBox height={280}>
+        <Bar
+          data={{
+            labels: c.filas.map((f, i) => `${f} (${totalesFila[i]})`),
+            datasets: c.columnas.map((cc, j) => ({
+              label: cc,
+              // Al 100%: lo que importa es la mezcla dentro de cada rango de
+              // edad, no cuál rango tiene más gente — eso ya lo dice su gráfica.
+              data: c.celdas.map((r, i) => (totalesFila[i] ? (r[j] / totalesFila[i]) * 100 : 0)),
+              backgroundColor: `${PERFIL_COLORS[j % PERFIL_COLORS.length]}cc`,
+              stack: 'cruce',
+              borderRadius: 3,
+            })),
+          }}
+          options={{
+            plugins: {
+              legend: legendBottom,
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => ` ${ctx.dataset.label}: ${(ctx.raw as number).toFixed(1)}%`,
+                },
+              },
+            },
+            scales: {
+              x: { stacked: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+              y: {
+                stacked: true,
+                beginAtZero: true,
+                max: 100,
+                grid: { color: GRID_COLOR },
+                ticks: { color: TICK_COLOR, callback: (v) => `${v}%` },
+              },
+            },
+          }}
+        />
+      </ChartBox>
+      <p className="mt-2 text-2xs text-muted">
+        n = {c.total} tratos con ambos campos diligenciados. El número entre paréntesis es la base de cada barra: un
+        rango con menos de 30 respuestas no sostiene una conclusión.
+      </p>
+    </>
+  );
+}
+
+/**
+ * Conversión del embudo por categoría del campo seleccionado.
+ *
+ * Es el cruce que convierte el capítulo en decisión de plata: las gráficas de
+ * arriba dicen a **quién registramos**, esta tabla dice **quién avanza**. Cuando
+ * el segmento más numeroso no es el que más visita, la pauta está comprando el
+ * tráfico equivocado.
+ */
+function ConversionPerfil({ leads, meta }: { leads: Lead[]; meta: Meta }) {
+  const [campo, setCampo] = useState(PERFIL_EDAD);
+  const filas = useMemo(() => conversionPorCampo(leads, meta, campo), [leads, meta, campo]);
+
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold text-dim">Conversión por atributo del perfil</h3>
+      <p className="mb-2 text-2xs text-muted">
+        Qué segmento <i>avanza</i>, no cuál es más numeroso. Ordenada por volumen a propósito: una categoría con 3
+        leads y un cierre da 33% y encabezaría la tabla sin significar nada.
+      </p>
+
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {PERFIL_CAMPOS.map((c, i) =>
+          meta.perfil[i]?.ausente ? null : (
+            <button
+              key={c.label}
+              type="button"
+              className={`pill ${i === campo ? 'pill-clear' : ''}`}
+              onClick={() => setCampo(i)}
+            >
+              {c.label}
+            </button>
+          ),
+        )}
+      </div>
+
+      <DataTable
+        rows={filas}
+        maxHeight={320}
+        empty="Ningún trato del recorte tiene este campo diligenciado."
+        columns={[
+          { header: PERFIL_CAMPOS[campo].label, cell: (r) => r.label },
+          { header: 'Leads', cell: (r) => r.n, align: 'right' },
+          { header: 'Citas+', cell: (r) => r.citas, align: 'right' },
+          { header: 'Visitas', cell: (r) => r.visitas, align: 'right' },
+          { header: '% Visita', cell: (r) => `${r.tasaVisita.toFixed(1)}%`, align: 'right' },
+          { header: 'Cierres', cell: (r) => r.cierres, align: 'right' },
+          {
+            header: '% Cierre',
+            align: 'right',
+            // Con menos de 30 respuestas la tasa es ruido: se muestra apagada
+            // en vez de esconderla, para que se vea que la categoría existe.
+            cell: (r) => (
+              <span className={r.n < 30 ? 'text-muted' : undefined}>
+                {r.tasaCierre.toFixed(1)}%{r.n < 30 ? ' *' : ''}
+              </span>
+            ),
+          },
+        ]}
+      />
+      <p className="mt-2 text-2xs text-muted">* Menos de 30 respuestas: dato insuficiente para concluir.</p>
     </div>
   );
 }

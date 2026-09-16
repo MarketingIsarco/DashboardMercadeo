@@ -45,6 +45,7 @@ import {
   resolveBase,
 } from './client';
 import type { PipedriveActivity, PipedriveDeal } from './client';
+import { buildPerfilExtractor } from './perfil';
 
 function classifyLossGroup(reason: string): LossGroup | '' {
   if (!reason) return '';
@@ -332,6 +333,11 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   // "Trato - Etiqueta" es un enum nativo: el deal guarda ids de opción, y las
   // etiquetas (nombre y color) viven en la definición del campo.
+  // Los trece campos del buyer persona se localizan por nombre, no por hash
+  // (el porqué está en `perfil.ts`). Devuelve un extractor que ya sabe resolver
+  // ids de opción y va internando los valores que aparecen.
+  const perfil = buildPerfilExtractor(dealFields);
+
   const etiquetaField = dealFields.find((f) => f.key === FIELD.ETIQUETA);
   const etiquetaNames = new Map<string, string>(
     (etiquetaField?.options ?? []).map((o) => [String(o.id), o.label]),
@@ -433,6 +439,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       lastActivity: dateOnly(deal.last_activity_date),
       name,
       phone,
+      perfil: perfil.extract(deal),
       firstContactHours: firstContactHours(deal, primera?.ts),
       firstContactBy: primera ? advisorDeUsuario(primera.creador) : -1,
     });
@@ -473,6 +480,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     advisors,
     lossReasons,
     digitalSources,
+    perfil: perfil.meta(),
   };
 
   return {
