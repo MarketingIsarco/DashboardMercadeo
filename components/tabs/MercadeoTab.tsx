@@ -6,6 +6,7 @@ import { ChartBox } from '@/components/charts/ChartBox';
 import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
+import { pctLabelsBar, pctLabelsDoughnut } from '@/components/charts/pctLabels';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
@@ -23,11 +24,10 @@ import {
   PERFIL_CAMPOS,
   PERFIL_COLORS,
   PERFIL_EDAD,
+  PERFIL_GENERO,
   PERFIL_GRUPO_LABEL,
-  PERFIL_INTERES,
   PERFIL_PRESUPUESTO,
   PERFIL_SESGO_PCT,
-  PERFIL_AREA,
   RUBROS,
   SIN_ETIQUETA,
   SIN_MOTIVO,
@@ -39,14 +39,7 @@ import {
 } from '@/lib/config/negocio';
 import type { Bolsa } from '@/lib/config/negocio';
 import { fmtCOP, monthLabel, normalize, pct, sourceIndices } from '@/lib/format';
-import {
-  cobertura,
-  coberturaMensual,
-  conversionPorCampo,
-  cruce,
-  distribucion,
-  suficiencia,
-} from '@/lib/buyer';
+import { cobertura, coberturaMensual, combinaciones, distribucion, suficiencia } from '@/lib/buyer';
 import type { Distribucion } from '@/lib/buyer';
 import {
   bolsasActivas,
@@ -1502,33 +1495,24 @@ function BuyerPersona({ filtered, meta }: { filtered: Lead[]; meta: Meta }) {
           Cada tarjeta muestra su propio <b>n</b>: el porcentaje se calcula sobre los tratos que tienen ese campo
           diligenciado, no sobre el total de leads del recorte.
         </p>
+        {/* Trece variables: nueve en tres columnas y las cuatro últimas en
+            cuatro, que es como Mercadeo pidió leerlas. Son dos rejillas y no
+            una sola con `col-span`, porque el ancho de columna cambia entre
+            los dos bloques y una sola rejilla no puede tener dos anchos. */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {dists.map((d) => (
+          {dists.slice(0, 9).map((d) => (
+            <PerfilCard key={d.campo} dist={d} />
+          ))}
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {dists.slice(9).map((d) => (
             <PerfilCard key={d.campo} dist={d} />
           ))}
         </div>
       </div>
 
       <div className="mt-8">
-        <h3 className="mb-2 text-xs font-semibold text-dim">Producto: presupuesto vs área requerida</h3>
-        <p className="mb-2 text-2xs text-muted">
-          El único cruce que decide tipología. Sólo entran los tratos que tienen las dos cifras, así que su n es
-          bastante menor que el de cada variable por separado.
-        </p>
-        <CruceMatriz leads={filtered} meta={meta} fila={PERFIL_PRESUPUESTO} col={PERFIL_AREA} />
-      </div>
-
-      <div className="mt-8">
-        <h3 className="mb-2 text-xs font-semibold text-dim">Mensaje: interés por rango de edad</h3>
-        <p className="mb-2 text-2xs text-muted">
-          Habitar e invertir no se le hablan igual a la misma persona. Esto dice qué proporción de cada rango de edad
-          llega buscando vivienda y cuál llega buscando rentabilidad.
-        </p>
-        <CruceBarras leads={filtered} meta={meta} fila={PERFIL_EDAD} col={PERFIL_INTERES} />
-      </div>
-
-      <div className="mt-8">
-        <ConversionPerfil leads={filtered} meta={meta} />
+        <ExploradorPerfil leads={filtered} meta={meta} />
       </div>
     </div>
   );
@@ -1661,6 +1645,7 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
       <ChartBox height={esRanking ? 260 : 220}>
         {esDona ? (
           <Doughnut
+            plugins={[pctLabelsDoughnut]}
             data={{
               labels: dist.items.map((i) => i.label),
               datasets: [
@@ -1675,6 +1660,11 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
             options={{
               plugins: {
                 legend: legendBottom,
+                // El denominador es el n de la tarjeta, no la suma de las
+                // porciones dibujadas: en una dona son lo mismo, pero dejarlo
+                // explícito evita que el día que se oculte una categoría los
+                // porcentajes se recalculen solos y dejen de sumar 100.
+                pctLabels: { total: dist.conDato, min: 3 },
                 tooltip: {
                   callbacks: {
                     label: (c) => `${c.label}: ${c.raw as number} (${pct(c.raw as number, dist.conDato)}%)`,
@@ -1685,6 +1675,7 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
           />
         ) : (
           <Bar
+            plugins={[pctLabelsBar]}
             data={{
               labels: dist.items.map((i) => i.label),
               datasets: [
@@ -1702,6 +1693,10 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
               indexAxis: esRanking ? ('y' as const) : ('x' as const),
               plugins: {
                 legend: { display: false },
+                // Aquí el `total` sí es indispensable: una barra en cero no
+                // aporta a la suma de las barras, pero el porcentaje tiene que
+                // seguir siendo sobre los tratos diligenciados del campo.
+                pctLabels: { total: dist.conDato },
                 tooltip: {
                   callbacks: {
                     // En barra horizontal el valor está en `x`; en vertical, en
@@ -1713,9 +1708,23 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
                   },
                 },
               },
+              // El porcentaje se dibuja por fuera de la barra: sin este margen
+              // el texto de la barra más alta se corta contra el borde del
+              // canvas. `grace` crece con los datos, un padding fijo no.
+              layout: { padding: { top: 14, right: esRanking ? 46 : 8 } },
               scales: {
-                x: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR }, beginAtZero: true },
-                y: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR, font: { size: 10 } }, beginAtZero: true },
+                x: {
+                  grid: { color: GRID_COLOR },
+                  ticks: { color: TICK_COLOR },
+                  beginAtZero: true,
+                  grace: esRanking ? '12%' : 0,
+                },
+                y: {
+                  grid: { color: GRID_COLOR },
+                  ticks: { color: TICK_COLOR, font: { size: 10 } },
+                  beginAtZero: true,
+                  grace: esRanking ? 0 : '12%',
+                },
               },
             }}
           />
@@ -1725,208 +1734,194 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
   );
 }
 
-/** Matriz de conteos de dos campos, con la celda tintada por intensidad. */
-function CruceMatriz({
-  leads,
-  meta,
-  fila,
-  col,
-}: {
-  leads: Lead[];
-  meta: Meta;
-  fila: number;
-  col: number;
-}) {
-  const c = useMemo(() => cruce(leads, meta, fila, col), [leads, meta, fila, col]);
-
-  if (!c.total) {
-    return (
-      <p className="text-xs text-muted">
-        Ningún trato del recorte tiene diligenciados {PERFIL_CAMPOS[fila].label} y {PERFIL_CAMPOS[col].label} al mismo
-        tiempo.
-      </p>
-    );
-  }
-
-  const max = Math.max(...c.celdas.flat());
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="dt">
-        <thead>
-          <tr>
-            <th>
-              {PERFIL_CAMPOS[fila].label} ↓ / {PERFIL_CAMPOS[col].label} →
-            </th>
-            {c.columnas.map((cc) => (
-              <th key={cc} style={{ textAlign: 'right' }}>
-                {cc}
-              </th>
-            ))}
-            <th style={{ textAlign: 'right' }}>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {c.filas.map((f, i) => (
-            <tr key={f}>
-              <td>{f}</td>
-              {c.celdas[i].map((n, j) => (
-                <td
-                  key={c.columnas[j]}
-                  style={{
-                    textAlign: 'right',
-                    // La intensidad sale del máximo de la matriz, no del total:
-                    // con 40 celdas casi todas quedarían transparentes.
-                    background: n ? `rgba(201,169,110,${(n / max) * 0.55 + 0.05})` : undefined,
-                    fontWeight: n === max ? 700 : undefined,
-                  }}
-                >
-                  {n || '–'}
-                </td>
-              ))}
-              <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                {c.celdas[i].reduce((a, b) => a + b, 0)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="mt-2 text-2xs text-muted">n = {c.total} tratos con ambas cifras diligenciadas.</p>
-    </div>
-  );
-}
-
-/** El campo `col` repartido dentro de cada categoría de `fila`, en barras apiladas al 100%. */
-function CruceBarras({
-  leads,
-  meta,
-  fila,
-  col,
-}: {
-  leads: Lead[];
-  meta: Meta;
-  fila: number;
-  col: number;
-}) {
-  const c = useMemo(() => cruce(leads, meta, fila, col), [leads, meta, fila, col]);
-
-  if (!c.total) {
-    return (
-      <p className="text-xs text-muted">
-        Ningún trato del recorte tiene diligenciados {PERFIL_CAMPOS[fila].label} y {PERFIL_CAMPOS[col].label} al mismo
-        tiempo.
-      </p>
-    );
-  }
-
-  const totalesFila = c.celdas.map((r) => r.reduce((a, b) => a + b, 0));
-
-  return (
-    <>
-      <ChartBox height={280}>
-        <Bar
-          data={{
-            labels: c.filas.map((f, i) => `${f} (${totalesFila[i]})`),
-            datasets: c.columnas.map((cc, j) => ({
-              label: cc,
-              // Al 100%: lo que importa es la mezcla dentro de cada rango de
-              // edad, no cuál rango tiene más gente — eso ya lo dice su gráfica.
-              data: c.celdas.map((r, i) => (totalesFila[i] ? (r[j] / totalesFila[i]) * 100 : 0)),
-              backgroundColor: `${PERFIL_COLORS[j % PERFIL_COLORS.length]}cc`,
-              stack: 'cruce',
-              borderRadius: 3,
-            })),
-          }}
-          options={{
-            plugins: {
-              legend: legendBottom,
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => ` ${ctx.dataset.label}: ${(ctx.raw as number).toFixed(1)}%`,
-                },
-              },
-            },
-            scales: {
-              x: { stacked: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
-              y: {
-                stacked: true,
-                beginAtZero: true,
-                max: 100,
-                grid: { color: GRID_COLOR },
-                ticks: { color: TICK_COLOR, callback: (v) => `${v}%` },
-              },
-            },
-          }}
-        />
-      </ChartBox>
-      <p className="mt-2 text-2xs text-muted">
-        n = {c.total} tratos con ambos campos diligenciados. El número entre paréntesis es la base de cada barra: un
-        rango con menos de 30 respuestas no sostiene una conclusión.
-      </p>
-    </>
-  );
-}
-
 /**
- * Conversión del embudo por categoría del campo seleccionado.
+ * Explorador combinado — hasta tres variables del perfil a la vez.
  *
- * Es el cruce que convierte el capítulo en decisión de plata: las gráficas de
- * arriba dicen a **quién registramos**, esta tabla dice **quién avanza**. Cuando
- * el segmento más numeroso no es el que más visita, la pauta está comprando el
- * tráfico equivocado.
+ * Es el sustituto de los tres cruces fijos que tenía el capítulo. La diferencia
+ * no es de comodidad: un cruce fijo contesta la pregunta que alguien tuvo hace
+ * un mes, y este contesta la que Mercadeo tenga hoy sin volver a tocar el
+ * código.
+ *
+ * Tiene filtros propios, aparte de la barra principal, y los tres importan:
+ *
+ * · **Variables** (hasta 3). El tope no es técnico. Cada variable que se agrega
+ *   multiplica las combinaciones y parte la base: con perfilamiento de dos
+ *   dígitos bajos, un cruce de cuatro deja filas de un trato cada una. Tres ya
+ *   está en el límite de lo que la muestra aguanta.
+ * · **Mínimo de leads.** Corta la cola de combinaciones de 1 y 2 tratos, que es
+ *   donde viven todos los 100% de cierre que no significan nada.
+ * · **Orden.** Por volumen para ver dónde está el grueso; por tasa de cierre
+ *   para buscar el segmento rentable — sólo tiene sentido con el mínimo puesto.
  */
-function ConversionPerfil({ leads, meta }: { leads: Lead[]; meta: Meta }) {
-  const [campo, setCampo] = useState(PERFIL_EDAD);
-  const filas = useMemo(() => conversionPorCampo(leads, meta, campo), [leads, meta, campo]);
+function ExploradorPerfil({ leads, meta }: { leads: Lead[]; meta: Meta }) {
+  const [sel, setSel] = useState<number[]>([PERFIL_GENERO, PERFIL_EDAD]);
+  const [minN, setMinN] = useState(5);
+  const [orden, setOrden] = useState<'volumen' | 'cierre'>('volumen');
+
+  const { base, filas } = useMemo(() => combinaciones(leads, meta, sel), [leads, meta, sel]);
+
+  const visibles = useMemo(() => {
+    const f = filas.filter((r) => r.n >= minN);
+    // La lógica ya devuelve ordenado por volumen; sólo hay que rehacerlo si se
+    // pide por cierre, y ahí el desempate vuelve a ser el volumen.
+    return orden === 'cierre' ? [...f].sort((a, b) => b.tasaCierre - a.tasaCierre || b.n - a.n) : f;
+  }, [filas, minN, orden]);
+
+  const cubiertos = visibles.reduce((acc, r) => acc + r.n, 0);
+  const maxN = visibles.length ? Math.max(...visibles.map((r) => r.n)) : 0;
+
+  /** Alterna una variable respetando el tope de tres. */
+  const toggle = (i: number) =>
+    setSel((cur) => {
+      if (cur.includes(i)) return cur.filter((c) => c !== i);
+      if (cur.length >= 3) return cur;
+      return [...cur, i];
+    });
 
   return (
     <div>
-      <h3 className="mb-2 text-xs font-semibold text-dim">Conversión por atributo del perfil</h3>
-      <p className="mb-2 text-2xs text-muted">
-        Qué segmento <i>avanza</i>, no cuál es más numeroso. Ordenada por volumen a propósito: una categoría con 3
-        leads y un cierre da 33% y encabezaría la tabla sin significar nada.
+      <h3 className="mb-2 text-xs font-semibold text-dim">Explorador combinado</h3>
+      <p className="mb-3 text-2xs text-muted">
+        Cruza hasta tres variables del perfil y mira cada segmento con su conversión. Sólo entran los tratos que
+        tienen <b>todas</b> las variables diligenciadas, así que la base cae al agregar la tercera: es la mecánica del
+        cruce, no un problema del filtro.
       </p>
 
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {PERFIL_CAMPOS.map((c, i) =>
-          meta.perfil[i]?.ausente ? null : (
+      <div className="rounded-lg border border-[#e8eaf2] p-3">
+        <div className="mb-1 flex items-baseline justify-between gap-2">
+          <span className="text-2xs font-semibold uppercase tracking-wide text-dim">
+            Variables ({sel.length} de 3)
+          </span>
+          {sel.length >= 3 ? (
+            <span className="text-2xs text-muted">Quita una para poder cambiar la selección</span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PERFIL_CAMPOS.map((c, i) => {
+            const on = sel.includes(i);
+            const bloqueado = !on && sel.length >= 3;
+            return meta.perfil[i]?.ausente ? null : (
+              <button
+                key={c.label}
+                type="button"
+                disabled={bloqueado}
+                className={`pill ${on ? 'pill-clear' : ''} ${bloqueado ? 'opacity-40' : ''}`}
+                onClick={() => toggle(i)}
+              >
+                {on ? `${sel.indexOf(i) + 1} · ` : ''}
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-2xs font-semibold uppercase tracking-wide text-dim">Mínimo de leads</span>
+            {[1, 5, 10, 30].map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`pill ${m === minN ? 'pill-clear' : ''}`}
+                onClick={() => setMinN(m)}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-2xs font-semibold uppercase tracking-wide text-dim">Ordenar por</span>
             <button
-              key={c.label}
               type="button"
-              className={`pill ${i === campo ? 'pill-clear' : ''}`}
-              onClick={() => setCampo(i)}
+              className={`pill ${orden === 'volumen' ? 'pill-clear' : ''}`}
+              onClick={() => setOrden('volumen')}
             >
-              {c.label}
+              Volumen
             </button>
-          ),
-        )}
+            <button
+              type="button"
+              className={`pill ${orden === 'cierre' ? 'pill-clear' : ''}`}
+              onClick={() => setOrden('cierre')}
+            >
+              % Cierre
+            </button>
+          </div>
+        </div>
       </div>
 
-      <DataTable
-        rows={filas}
-        maxHeight={320}
-        empty="Ningún trato del recorte tiene este campo diligenciado."
-        columns={[
-          { header: PERFIL_CAMPOS[campo].label, cell: (r) => r.label },
-          { header: 'Leads', cell: (r) => r.n, align: 'right' },
-          { header: 'Citas+', cell: (r) => r.citas, align: 'right' },
-          { header: 'Visitas', cell: (r) => r.visitas, align: 'right' },
-          { header: '% Visita', cell: (r) => `${r.tasaVisita.toFixed(1)}%`, align: 'right' },
-          { header: 'Cierres', cell: (r) => r.cierres, align: 'right' },
-          {
-            header: '% Cierre',
-            align: 'right',
-            // Con menos de 30 respuestas la tasa es ruido: se muestra apagada
-            // en vez de esconderla, para que se vea que la categoría existe.
-            cell: (r) => (
-              <span className={r.n < 30 ? 'text-muted' : undefined}>
-                {r.tasaCierre.toFixed(1)}%{r.n < 30 ? ' *' : ''}
-              </span>
-            ),
-          },
-        ]}
-      />
-      <p className="mt-2 text-2xs text-muted">* Menos de 30 respuestas: dato insuficiente para concluir.</p>
+      {!sel.length ? (
+        <p className="mt-3 text-xs text-muted">Escoge al menos una variable para ver el cruce.</p>
+      ) : (
+        <>
+          <p className="mb-2 mt-3 text-2xs text-muted">
+            Base del cruce: <b>{base.toLocaleString('es-CO')}</b> tratos con las {sel.length} variables diligenciadas
+            {base ? ` (${pct(base, leads.length)}% del recorte)` : ''} · {visibles.length} de {filas.length}{' '}
+            combinaciones con {minN} lead(s) o más, que cubren {base ? pct(cubiertos, base) : '0.0'}% de la base.
+          </p>
+
+          <DataTable
+            rows={visibles}
+            maxHeight={420}
+            empty={
+              base
+                ? `Ninguna combinación llega a ${minN} leads. Baja el mínimo o quita una variable.`
+                : 'Ningún trato del recorte tiene todas estas variables diligenciadas al mismo tiempo.'
+            }
+            columns={[
+              ...sel.map((c, j) => ({
+                header: PERFIL_CAMPOS[c].label,
+                cell: (r: (typeof visibles)[number]) => r.valores[j],
+              })),
+              {
+                header: 'Leads',
+                align: 'right' as const,
+                // La barra de intensidad va dentro de la celda y no como gráfica
+                // aparte: con 40 combinaciones una gráfica no se lee, y aquí el
+                // ojo encuentra el grueso sin salir de la tabla.
+                cell: (r: (typeof visibles)[number]) => (
+                  <span className="relative inline-block min-w-[60px] px-1 text-right">
+                    <span
+                      className="absolute inset-y-0 right-0 rounded-sm"
+                      style={{
+                        width: maxN ? `${(r.n / maxN) * 100}%` : 0,
+                        background: `${PERFIL_COLORS[0]}40`,
+                      }}
+                    />
+                    <span className="relative font-semibold">{r.n}</span>
+                  </span>
+                ),
+              },
+              {
+                header: '% base',
+                align: 'right' as const,
+                cell: (r: (typeof visibles)[number]) => `${r.pctBase.toFixed(1)}%`,
+              },
+              { header: 'Citas+', align: 'right' as const, cell: (r: (typeof visibles)[number]) => r.citas },
+              { header: 'Visitas', align: 'right' as const, cell: (r: (typeof visibles)[number]) => r.visitas },
+              {
+                header: '% Visita',
+                align: 'right' as const,
+                cell: (r: (typeof visibles)[number]) => `${r.tasaVisita.toFixed(1)}%`,
+              },
+              { header: 'Cierres', align: 'right' as const, cell: (r: (typeof visibles)[number]) => r.cierres },
+              {
+                header: '% Cierre',
+                align: 'right' as const,
+                // Debajo de 30 respuestas la tasa es ruido. Se muestra apagada
+                // en vez de esconderse, para que la combinación siga existiendo.
+                cell: (r: (typeof visibles)[number]) => (
+                  <span className={r.n < 30 ? 'text-muted' : 'font-semibold'}>
+                    {r.tasaCierre.toFixed(1)}%{r.n < 30 ? ' *' : ''}
+                  </span>
+                ),
+              },
+            ]}
+          />
+          <p className="mt-2 text-2xs text-muted">
+            * Menos de 30 respuestas: la tasa es indicativa, no concluyente.
+          </p>
+        </>
+      )}
     </div>
   );
 }

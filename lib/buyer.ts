@@ -310,116 +310,89 @@ export function coberturaMensual(leads: Lead[]): MesCobertura[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Cruces
+// Explorador combinado
 // ─────────────────────────────────────────────────────────────────────
 
-export interface Cruce {
-  filas: string[];
-  columnas: string[];
-  /** `celdas[fila][columna]`. */
-  celdas: number[][];
-  /** Tratos con **ambos** campos diligenciados — el único denominador honesto. */
-  total: number;
-}
-
-/**
- * Cruce de dos campos, contando sólo los tratos que tienen los dos.
- *
- * Las filas y columnas salen del orden canónico del campo cuando lo tiene, y
- * por frecuencia cuando no: así "26 a 35" queda antes que "36 a 45" en vez de
- * ordenarse por cuántos cayeron en cada rango.
- */
-export function cruce(leads: Lead[], meta: Meta, campoFila: number, campoCol: number): Cruce {
-  const conteo = new Map<string, Map<string, number>>();
-  const filasVistas = new Map<string, number>();
-  const colsVistas = new Map<string, number>();
-  let total = 0;
-
-  for (const l of leads) {
-    const f = categoria(l, campoFila, meta);
-    const c = categoria(l, campoCol, meta);
-    if (f === null || c === null) continue;
-
-    total += 1;
-    filasVistas.set(f, (filasVistas.get(f) ?? 0) + 1);
-    colsVistas.set(c, (colsVistas.get(c) ?? 0) + 1);
-
-    const fila = conteo.get(f) ?? new Map<string, number>();
-    fila.set(c, (fila.get(c) ?? 0) + 1);
-    conteo.set(f, fila);
-  }
-
-  const filas = ordenarCategorias(campoFila, filasVistas);
-  const columnas = ordenarCategorias(campoCol, colsVistas);
-
-  return {
-    filas,
-    columnas,
-    celdas: filas.map((f) => columnas.map((c) => conteo.get(f)?.get(c) ?? 0)),
-    total,
-  };
-}
-
-/** Orden canónico del campo si lo tiene; si no, por frecuencia descendente. */
-function ordenarCategorias(campo: number, vistas: Map<string, number>): string[] {
-  const def = PERFIL_CAMPOS[campo];
-  const canon = def.viz === 'histograma' ? (def.buckets ?? []).map((b) => b.label) : (def.orden ?? []);
-
-  const presentes = [...vistas.keys()];
-  const enOrden = canon.filter((c) => vistas.has(c));
-  const resto = presentes
-    .filter((c) => !canon.includes(c))
-    .sort((a, b) => (vistas.get(b) ?? 0) - (vistas.get(a) ?? 0) || a.localeCompare(b));
-
-  return [...enOrden, ...resto];
-}
-
-export interface ConversionFila {
-  label: string;
+export interface Combinacion {
+  /** El valor de cada variable seleccionada, en el mismo orden que se pidieron. */
+  valores: string[];
   n: number;
   citas: number;
   visitas: number;
   cierres: number;
-  /** `cierres / n` en porcentaje. */
-  tasaCierre: number;
-  /** `visitas / n` en porcentaje. */
+  /** `n` sobre la base — el porcentaje del segmento dentro de la muestra cruzada. */
+  pctBase: number;
   tasaVisita: number;
+  tasaCierre: number;
+}
+
+export interface Combinado {
+  /**
+   * Tratos que tienen **todas** las variables seleccionadas diligenciadas.
+   *
+   * Es el denominador y el dato incómodo del explorador: cruzar tres variables
+   * con 10% de perfilamiento deja una base minúscula. Mostrarla arriba evita
+   * que alguien lea "el 60% de este segmento cierra" sin ver que son 5 tratos.
+   */
+  base: number;
+  filas: Combinacion[];
 }
 
 /**
- * Conversión del embudo por cada categoría de un campo.
+ * Una fila por combinación de valores presente en los datos.
  *
- * Es el cruce que convierte el capítulo en decisión de pauta: la distribución
- * dice a **quién registramos**, esta tabla dice **quién avanza**. Cuando las dos
- * no coinciden —el segmento más numeroso no es el que más visita— la plata está
- * comprando el tráfico equivocado.
+ * Sólo entran los tratos que tienen **todas** las variables: un trato con
+ * género y edad pero sin localidad no puede ir a ninguna fila de un cruce de
+ * tres, y meterlo en una categoría "sin dato" crearía un segmento que no
+ * existe. Por eso la base cae rápido al agregar variables — es la mecánica del
+ * cruce, no un error del filtro.
  *
- * Se ordena por volumen, no por tasa: una categoría con 3 leads y un cierre da
- * 33% y encabezaría la tabla sin significar nada.
+ * Se ordena por volumen. Ordenar por tasa de cierre pondría arriba las
+ * combinaciones de 2 y 3 tratos, que es justo lo que no se debe mirar primero;
+ * el componente deja cambiarlo, con el corte de muestra mínima a la mano.
  */
-export function conversionPorCampo(leads: Lead[], meta: Meta, campo: number): ConversionFila[] {
-  const acc = new Map<string, ConversionFila>();
+export function combinaciones(leads: Lead[], meta: Meta, campos: number[]): Combinado {
+  const acc = new Map<string, Combinacion>();
+  let base = 0;
 
   for (const l of leads) {
-    const cat = categoria(l, campo, meta);
-    if (cat === null) continue;
+    const valores: string[] = [];
+    let completo = true;
+
+    for (const c of campos) {
+      const v = categoria(l, c, meta);
+      if (v === null) {
+        completo = false;
+        break;
+      }
+      valores.push(v);
+    }
+    if (!completo) continue;
+
+    base += 1;
+    // El separador no puede aparecer en un valor del CRM: "Invertir, Habitar"
+    // lleva coma, y los rangos de ingresos llevan puntos.
+    const clave = valores.join('\u0000');
 
     const r =
-      acc.get(cat) ??
-      { label: cat, n: 0, citas: 0, visitas: 0, cierres: 0, tasaCierre: 0, tasaVisita: 0 };
+      acc.get(clave) ??
+      { valores, n: 0, citas: 0, visitas: 0, cierres: 0, pctBase: 0, tasaVisita: 0, tasaCierre: 0 };
 
     r.n += 1;
     if (isCita(l)) r.citas += 1;
     if (isVisita(l)) r.visitas += 1;
     if (isGanado(l)) r.cierres += 1;
-    acc.set(cat, r);
+    acc.set(clave, r);
   }
 
-  return [...acc.values()]
+  const filas = [...acc.values()]
     .map((r) => ({
       ...r,
-      tasaCierre: r.n ? (r.cierres / r.n) * 100 : 0,
+      pctBase: base ? (r.n / base) * 100 : 0,
       tasaVisita: r.n ? (r.visitas / r.n) * 100 : 0,
+      tasaCierre: r.n ? (r.cierres / r.n) * 100 : 0,
     }))
-    .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+    .sort((a, b) => b.n - a.n || a.valores.join().localeCompare(b.valores.join()));
+
+  return { base, filas };
 }
