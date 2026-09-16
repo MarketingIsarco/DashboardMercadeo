@@ -163,6 +163,14 @@ export interface Kpis {
   total: number;
   citas: number;
   visitas: number;
+  /**
+   * Leads que **alcanzaron** Negociación, contando igual que citas y visitas
+   * (`stage >= X`), no los que están parados ahí hoy — eso es `enNegociacion`.
+   *
+   * Sin este dato el embudo de los indicadores generales saltaba de Visitas a
+   * Separación, que es justo donde se cae la mitad del pipeline.
+   */
+  negociaciones: number;
   separaciones: number;
   ganados: number;
   perdidos: number;
@@ -182,6 +190,7 @@ export function computeKpis(f: Lead[]): Kpis {
     total: f.length,
     citas: f.filter(isCita).length,
     visitas: f.filter(isVisita).length,
+    negociaciones: f.filter(isNegociacion).length,
     separaciones: f.filter(isSeparacion).length,
     ganados: f.filter(isGanado).length,
     perdidos: f.filter(isPerdido).length,

@@ -119,17 +119,26 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
         title="01 · KPIs Generales"
         sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
       >
-        <KpiGrid>
-          <Kpi label="Total Leads" value={k.total.toLocaleString('es-CO')} meta="Incluye activos, perdidos y ganados" />
-          <Kpi label="Citas agendadas" value={k.citas} meta={`${pct(k.citas, k.total)}% del total`} />
-          <Kpi label="Visitas realizadas" value={k.visitas} meta={`${pct(k.visitas, k.total)}% del total`} />
-          <Kpi label="Tasa Lead→Cita" value={`${pct(k.citas, k.total)}%`} meta={`${k.citas} citas de ${k.total} leads`} />
+        <KpiGrid cols={7}>
+          <Kpi size="xs" label="Total Leads" value={k.total.toLocaleString('es-CO')} meta="Activos, perdidos y ganados" />
+          <Kpi size="xs" label="Citas agendadas" value={k.citas} meta={`${pct(k.citas, k.total)}% del total`} />
+          <Kpi size="xs" label="Visitas realizadas" value={k.visitas} meta={`${pct(k.visitas, k.total)}% del total`} />
+          {/* Etapa alcanzada, igual que citas y visitas. */}
           <Kpi
+            size="xs"
+            label="Negociaciones"
+            value={k.negociaciones}
+            meta={`${pct(k.negociaciones, k.total)}% del total`}
+            sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+          />
+          <Kpi size="xs" label="Tasa Lead→Cita" value={`${pct(k.citas, k.total)}%`} meta={`${k.citas} citas de ${k.total} leads`} />
+          <Kpi
+            size="xs"
             label="Tasa Visita→Sep"
             value={`${pct(k.separaciones + k.ganados, k.visitas)}%`}
             meta={`${k.separaciones + k.ganados} cierres de ${k.visitas} visitas`}
           />
-          <Kpi label="Tasa de pérdida" value={`${pct(k.perdidos, k.total)}%`} meta={`${k.perdidos} perdidos de ${k.total}`} />
+          <Kpi size="xs" label="Tasa de pérdida" value={`${pct(k.perdidos, k.total)}%`} meta={`${k.perdidos} de ${k.total}`} />
         </KpiGrid>
         <TasasMercado digital={filters.digital} />
       </Section>

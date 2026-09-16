@@ -61,28 +61,41 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         title="01 · Indicadores Generales"
         sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
       >
-        <KpiGrid>
+        <KpiGrid cols={8}>
           <Kpi
+            size="xs"
             label="Leads"
             value={k.total.toLocaleString('es-CO')}
             meta={goal ? `Meta ${goal.leads}/mes` : undefined}
             delta={metaVolumen ? pctNum(k.total - metaVolumen.leads, metaVolumen.leads) : null}
           />
           <Kpi
+            size="xs"
             label="Citas"
             value={k.citas}
             meta={`${pct(k.citas, k.total)}% de leads`}
             delta={metaVolumen ? pctNum(k.citas - metaVolumen.citas, metaVolumen.citas) : null}
           />
           <Kpi
+            size="xs"
             label="Visitas"
             value={k.visitas}
             meta={`${pct(k.visitas, k.total)}% de leads`}
             delta={metaVolumen ? pctNum(k.visitas - metaVolumen.visitas, metaVolumen.visitas) : null}
           />
-          <Kpi label="Separaciones" value={k.separaciones} meta={`${pct(k.separaciones, k.total)}% de leads`} />
-          <Kpi label="Ventas" value={ventas.length} meta="Separación + Ganados" />
+          {/* Etapa alcanzada, igual que citas y visitas. Cierra el hueco que
+              había entre la visita y la separación. */}
           <Kpi
+            size="xs"
+            label="Negociaciones"
+            value={k.negociaciones}
+            meta={`${pct(k.negociaciones, k.total)}% de leads`}
+            sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+          />
+          <Kpi size="xs" label="Separaciones" value={k.separaciones} meta={`${pct(k.separaciones, k.total)}% de leads`} />
+          <Kpi size="xs" label="Ventas" value={ventas.length} meta="Separación + Ganados" />
+          <Kpi
+            size="xs"
             label="Tasa de cierre"
             value={`${tasaCierre.toFixed(2)}%`}
             meta={goal ? `Meta ${goal.tasa.toFixed(2)}%` : undefined}
@@ -90,6 +103,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             deltaSuffix=" pp"
           />
           <Kpi
+            size="xs"
             label="Cierres proyectados"
             value={k.cierresProyectados}
             sub={`${k.enNegociacion} en negociación · ${k.enSeparacion} en separación`}

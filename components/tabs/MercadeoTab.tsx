@@ -211,8 +211,9 @@ function KpiSection({
       title="01 · Indicadores Generales"
       sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
     >
-      <KpiGrid cols={6}>
+      <KpiGrid cols={7}>
         <Kpi
+          size="xs"
           label="Leads"
           value={k.total.toLocaleString('es-CO')}
           meta={`Meta: ${goal ? goal.leads : 'N/A'}/mes`}
@@ -220,6 +221,7 @@ function KpiSection({
           deltaSuffix=""
         />
         <Kpi
+          size="xs"
           label="Citas+"
           value={k.citas}
           meta={`${pct(k.citas, k.total)}% de leads`}
@@ -228,6 +230,7 @@ function KpiSection({
           deltaSuffix=""
         />
         <Kpi
+          size="xs"
           label="Visitas"
           value={k.visitas}
           meta={`${pct(k.visitas, k.total)}% de leads`}
@@ -235,14 +238,27 @@ function KpiSection({
           delta={prevK ? delta(k.visitas, prevK.visitas) : null}
           deltaSuffix=""
         />
+        {/* Negociaciones cuenta etapa **alcanzada**, igual que citas y visitas:
+            es el paso del embudo que faltaba entre la visita y la separación. */}
+        <Kpi
+          size="xs"
+          label="Negociaciones"
+          value={k.negociaciones}
+          meta={`${pct(k.negociaciones, k.total)}% de leads`}
+          sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+          delta={prevK ? delta(k.negociaciones, prevK.negociaciones) : null}
+          deltaSuffix=""
+        />
         {/* La separación es el paso previo al cierre, así que comparte su meta. */}
         <Kpi
+          size="xs"
           label="Separación"
           value={k.separaciones}
           meta={`${pct(k.separaciones, k.total)}% de leads`}
           sub={`Meta: ${goal ? goal.cierres : 'N/A'}/mes`}
         />
         <Kpi
+          size="xs"
           label="Cierres"
           value={k.ganados}
           meta={`${pct(k.ganados, k.total)}% de leads`}
@@ -251,6 +267,7 @@ function KpiSection({
           deltaSuffix=""
         />
         <Kpi
+          size="xs"
           label="Perdidos"
           value={k.perdidos}
           meta={`${pct(k.perdidos, k.total)}% de leads`}
@@ -365,7 +382,7 @@ function Timeline({
     let metaLeads: number | null = null;
     let metaVis: number | null = null;
     let metaLeadsLabel = 'Meta leads';
-    let metaVisLabel = 'Meta visitas (10%)';
+    let metaVisLabel = 'Meta visitas';
 
     if (gran === 'month') {
       const ta = timeAxis(leads);
@@ -374,9 +391,13 @@ function Timeline({
       vis = ta.keys.map((kk) => leads.filter((l) => keyOf(l) === kk && isVisita(l)).length);
       if (goal) {
         metaLeads = goal.leads;
-        metaVis = Math.round(goal.leads * 0.1);
+        // La meta de visitas sale de `META`, no de un 10% de la meta de leads.
+        // Antes se calculaba así y daba 61 donde la meta real son 105: la
+        // tarjeta de Visitas del capítulo 01 y esta línea decían cosas
+        // distintas sobre el mismo objetivo.
+        metaVis = goal.visitas;
         metaLeadsLabel = `Meta leads (${goal.leads}/mes)`;
-        metaVisLabel = `Meta visitas (${metaVis}/mes, 10%)`;
+        metaVisLabel = `Meta visitas (${metaVis}/mes)`;
       }
     } else {
       // Semana (lunes ISO) o día. Bucket por clave temporal.
@@ -400,8 +421,11 @@ function Timeline({
       counts = keys.map((kk) => bucket.get(kk) ?? 0);
       vis = keys.map((kk) => bucketVis.get(kk) ?? 0);
       if (goal) {
-        metaLeads = gran === 'week' ? Math.round(goal.leads / 4.3) : Math.round(goal.leads / 30);
-        metaVis = Math.round(metaLeads * 0.1);
+        // Las dos metas se prorratean con el mismo divisor: si la de visitas
+        // se sacara de la de leads ya prorrateada, el redondeo las desalinearía.
+        const div = gran === 'week' ? 4.3 : 30;
+        metaLeads = Math.round(goal.leads / div);
+        metaVis = Math.round(goal.visitas / div);
         const unit = gran === 'week' ? 'sem' : 'día';
         metaLeadsLabel = `Meta leads (${metaLeads}/${unit})`;
         metaVisLabel = `Meta visitas (${metaVis}/${unit})`;
@@ -431,6 +455,7 @@ function Timeline({
       pointRadius: 3,
       borderWidth: 2,
       order: 2,
+      yAxisID: 'y2',
     },
     ...(chart.metaLeads !== null
       ? [{
@@ -449,13 +474,17 @@ function Timeline({
       ? [{
           label: chart.metaVisLabel,
           data: chart.counts.map(() => chart.metaVis as number),
-          borderColor: '#4ade8088',
+          // Verde oscuro, no el mismo verde al 53%: la meta se dibuja arriba
+          // del todo y en claro se pierde contra el fondo, que es justo donde
+          // hay que poder verla.
+          borderColor: '#22a55b',
           backgroundColor: 'transparent',
           borderWidth: 1.5,
-          borderDash: [4, 4],
+          borderDash: [5, 4],
           pointRadius: 0,
           tension: 0,
           order: 1,
+          yAxisID: 'y2',
         }]
       : []),
   ];
@@ -477,6 +506,10 @@ function Timeline({
           ))}
         </div>
       </div>
+      <p className="mb-2 text-2xs text-muted">
+        Leads en el eje izquierdo, visitas en el derecho, cada uno con su meta. Comparten gráfica pero no escala, así
+        que no se comparan alturas entre las dos líneas: cada una se lee contra su propia meta.
+      </p>
       <ChartBox height={300}>
         <Line
           data={{ labels: chart.labels, datasets }}
@@ -484,7 +517,23 @@ function Timeline({
             plugins: { legend: legendBottom, tooltip: { mode: 'index', intersect: false } },
             scales: {
               x: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR, maxRotation: gran === 'day' ? 90 : 0 } },
-              y: { beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+              y: {
+                position: 'left',
+                beginAtZero: true,
+                grid: { color: GRID_COLOR },
+                ticks: { color: '#6366f1' },
+                title: { display: true, text: 'Leads', color: '#6366f1', font: { size: 10 } },
+              },
+              y2: {
+                type: 'linear',
+                position: 'right',
+                beginAtZero: true,
+                // Sin retícula propia: dos juegos de líneas horizontales sobre
+                // el mismo lienzo se leen como una sola y confunden la lectura.
+                grid: { display: false },
+                ticks: { color: '#22a55b' },
+                title: { display: true, text: 'Visitas', color: '#22a55b', font: { size: 10 } },
+              },
             },
           }}
         />
