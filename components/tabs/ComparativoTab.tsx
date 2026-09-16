@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { MonthSelect } from '@/components/ui/MonthSelect';
 import { Popover } from '@/components/ui/Popover';
@@ -226,6 +227,7 @@ export function ComparativoTab({ data, meta }: TabProps) {
             pie={(c) => `${n0(c.visitas)} de ${n0(c.leads)}`}
           />
         </div>
+        <TasasMercado digital={null} nota="Esta pestaña no responde al filtro de Canal, así que muestra los dos." />
       </Section>
 
       {/* 02 · Inversión y costos unitarios */}

@@ -7,6 +7,7 @@ import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
 import { pctLabelsBar, pctLabelsDoughnut } from '@/components/charts/pctLabels';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
@@ -256,6 +257,7 @@ function KpiSection({
           sub={`${k.abiertos.toLocaleString('es-CO')} siguen abiertos`}
         />
       </KpiGrid>
+      <TasasMercado digital={filters.digital} />
     </Section>
   );
 }

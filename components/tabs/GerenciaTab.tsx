@@ -6,6 +6,7 @@ import { ChartBox } from '@/components/charts/ChartBox';
 import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { MonthSelect } from '@/components/ui/MonthSelect';
@@ -78,6 +79,7 @@ export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
         sub={`Corte al ${today} · ${open.length.toLocaleString('es-CO')} leads abiertos en el filtro actual`}
       >
         <Pulso leads={filtered} open={open} today={today} />
+        <TasasMercado digital={filters.digital} />
         <div className="mt-6 grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Tendencia Leads vs Cierres (últimos 6 meses)</h3>

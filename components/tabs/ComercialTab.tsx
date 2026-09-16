@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { ChartBox } from '@/components/charts/ChartBox';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
@@ -130,6 +131,7 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
           />
           <Kpi label="Tasa de pérdida" value={`${pct(k.perdidos, k.total)}%`} meta={`${k.perdidos} perdidos de ${k.total}`} />
         </KpiGrid>
+        <TasasMercado digital={filters.digital} />
       </Section>
 
       {/* 02 · Gestión Comercial */}

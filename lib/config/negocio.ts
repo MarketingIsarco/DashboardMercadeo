@@ -558,6 +558,49 @@ export const PERFIL_COLORS = [
 export const SIN_PERFIL = 'Sin diligenciar';
 export const SIN_PERFIL_COLOR = '#9090a8';
 
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * TASAS DE CONVERSIÓN DE MERCADO
+ *
+ * ⚠️ No salen de Pipedrive ni se calculan: son el **estándar del sector** que
+ * Mercadeo usa como referencia, y se actualizan a mano.
+ *
+ * Son una regla, no una medición. El dashboard las muestra al lado de sus
+ * propias cifras para dar contexto, pero nunca las mezcla con ellas: si alguna
+ * vez estos números terminan alimentando un cálculo, deja de ser una referencia
+ * y se convierte en un dato inventado circulando por el tablero.
+ *
+ * Los cinco pasos calzan uno a uno con las transiciones de `STAGES`:
+ * Interesado → Contactado → Cita Agendada → Visitado → Negociación →
+ * Separación. "Firma & Entrega" queda fuera porque es posventa, igual que en
+ * el filtro de etapa.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+export interface TasaMercado {
+  /** El paso del embudo, con los nombres de `STAGES`. */
+  label: string;
+  /** Versión corta para las tarjetas angostas. */
+  corto: string;
+  /** Tasa del canal digital, en porcentaje. */
+  digital: number;
+  /** Tasa del canal no digital, en porcentaje. */
+  noDigital: number;
+  /**
+   * Color propio del paso. Siguen el orden del embudo y están escogidos para
+   * distinguirse entre sí de un vistazo, que es justo para lo que sirven.
+   */
+  color: string;
+}
+
+export const TASAS_MERCADO: TasaMercado[] = [
+  { label: 'Interesado → Contactado', corto: 'Contacto', digital: 67, noDigital: 95, color: '#6366f1' },
+  { label: 'Contactado → Cita agendada', corto: 'Cita', digital: 20, noDigital: 80, color: '#22d3ee' },
+  { label: 'Cita → Visita', corto: 'Visita', digital: 55, noDigital: 95, color: '#f59e0b' },
+  { label: 'Visita → Negociación', corto: 'Negociación', digital: 25, noDigital: 28, color: '#f43f5e' },
+  { label: 'Negociación → Separación', corto: 'Separación', digital: 67, noDigital: 77, color: '#4ade80' },
+];
+
 export interface Goal {
   leads: number;
   citas: number;

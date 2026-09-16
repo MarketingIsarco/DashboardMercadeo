@@ -5,6 +5,7 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 import { ChartBox } from '@/components/charts/ChartBox';
 import { MixedChart } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
@@ -94,6 +95,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             sub={`${k.enNegociacion} en negociación · ${k.enSeparacion} en separación`}
           />
         </KpiGrid>
+        <TasasMercado digital={filters.digital} />
       </Section>
 
       <Section title="02 · Embudo de Conversión" sub="Leads que alcanzaron cada etapa, acumulado">
