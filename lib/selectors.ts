@@ -1,13 +1,14 @@
 import {
   CONSTRUCTORA_IDX,
   META,
+  metasEtapa,
   MIN_YEAR,
   STAGE_CITA,
   STAGE_NEGOCIACION,
   STAGE_SEPARACION,
   STAGE_VISITA,
 } from '@/lib/config/negocio';
-import type { Goal } from '@/lib/config/negocio';
+import type { Goal, MetasEtapa } from '@/lib/config/negocio';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import type { DashboardData, Lead, Meta, Status } from '@/lib/types';
 
@@ -213,19 +214,57 @@ export function goalFor(st: FilterState): Goal | null {
   const cons = st.projects.filter((i) => CONSTRUCTORA_IDX.includes(i));
   if (st.projects.length && cons.length === 0) return null;
 
-  if (cons.length === 1) return META[cons[0]] ?? null;
+  let base;
+  if (cons.length === 1) {
+    base = META[cons[0]];
+    if (!base) return null;
+  } else {
+    // Sin proyecto seleccionado (o varios): meta agregada de la constructora.
+    // Tinguazul 1 comparte la meta de 2A, así que sumarlo la duplicaría.
+    const inari = META[0];
+    const tng = META[1];
+    base = { leads: inari.leads + tng.leads, cierres: inari.cierres + tng.cierres };
+  }
 
-  // Sin proyecto seleccionado (o varios): meta agregada de la constructora.
-  // Tinguazul 1 comparte la meta de 2A, así que sumarlo la duplicaría.
-  const inari = META[0];
-  const tng = META[1];
+  // Las metas de etapa se derivan de la meta de leads y del canal filtrado.
+  // Se calculan sobre `base.leads` ya agregado, no sumando las de cada
+  // proyecto: redondear dos veces y sumar da un número distinto de redondear
+  // el total una vez, y el tablero mostraría metas que no cuadran entre sí.
+  const digital = metasEtapa(base.leads, true);
+  const noDigital = metasEtapa(base.leads, false);
+
   return {
-    leads: inari.leads + tng.leads,
-    citas: inari.citas + tng.citas,
-    visitas: inari.visitas + tng.visitas,
-    cierres: inari.cierres + tng.cierres,
-    tasa: (inari.tasa + tng.tasa) / 2,
+    leads: base.leads,
+    cierres: base.cierres,
+    tasa: base.leads ? (base.cierres / base.leads) * 100 : 0,
+    etapas: st.digital === null ? null : st.digital ? digital : noDigital,
+    porCanal: { digital, noDigital },
   };
+}
+
+/**
+ * Texto de la meta de una etapa, listo para el rótulo del KPI.
+ *
+ * Sin canal escogido no hay una sola meta, así que muestra las dos referencias
+ * en vez de callarlas: el usuario sigue viendo contra qué compararse, y queda
+ * explícito que el número depende del canal.
+ */
+export function metaEtapa(goal: Goal | null, k: keyof MetasEtapa): string | undefined {
+  if (!goal) return undefined;
+  if (goal.etapas) return `Meta ${goal.etapas[k]}/mes`;
+  return `Meta ${goal.porCanal.digital[k]} dig · ${goal.porCanal.noDigital[k]} no dig`;
+}
+
+/**
+ * Variación contra la meta de etapa, en %.
+ *
+ * `null` mientras no haya canal escogido —no hay contra qué medir— y también
+ * cuando la meta es cero, que dividiría por cero.
+ */
+export function deltaEtapa(goal: Goal | null, k: keyof MetasEtapa, real: number): number | null {
+  if (!goal?.etapas) return null;
+  const m = goal.etapas[k];
+  return m ? ((real - m) / m) * 100 : null;
 }
 
 /** Meses presentes en los datos, ordenados y recortados a `MIN_YEAR`. */

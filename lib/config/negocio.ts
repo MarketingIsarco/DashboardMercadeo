@@ -574,17 +574,24 @@ export const SIN_PERFIL_COLOR = '#9090a8';
  * Interesado → Contactado → Cita Agendada → Visitado → Negociación →
  * Separación. "Firma & Entrega" queda fuera porque es posventa, igual que en
  * el filtro de etapa.
+ *
+ * ⚠️ AQUÍ SE GUARDA LA TASA **ETAPA A ETAPA**, QUE ES COMO LA ENTREGA LA FUENTE.
+ * Lo que el tablero **muestra** es el acumulado desde Interesado, que calcula
+ * `tasasDesdeInteresado()`. El acumulado no se guarda: sería el mismo dato dos
+ * veces y terminaría discrepando, igual que habría pasado con los totales de
+ * inversión. Para cambiar lo que se ve en pantalla se edita el paso de abajo,
+ * no el resultado.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 export interface TasaMercado {
-  /** El paso del embudo, con los nombres de `STAGES`. */
-  label: string;
+  /** Etapa que se alcanza en este paso, con los nombres de `STAGES`. */
+  etapa: string;
   /** Versión corta para las tarjetas angostas. */
   corto: string;
-  /** Tasa del canal digital, en porcentaje. */
+  /** Tasa etapa a etapa del canal digital (contra la etapa anterior), en %. */
   digital: number;
-  /** Tasa del canal no digital, en porcentaje. */
+  /** Tasa etapa a etapa del canal no digital (contra la etapa anterior), en %. */
   noDigital: number;
   /**
    * Color propio del paso. Siguen el orden del embudo y están escogidos para
@@ -594,32 +601,114 @@ export interface TasaMercado {
 }
 
 export const TASAS_MERCADO: TasaMercado[] = [
-  { label: 'Interesado → Contactado', corto: 'Contacto', digital: 67, noDigital: 95, color: '#6366f1' },
-  { label: 'Contactado → Cita agendada', corto: 'Cita', digital: 20, noDigital: 80, color: '#22d3ee' },
-  { label: 'Cita → Visita', corto: 'Visita', digital: 55, noDigital: 95, color: '#f59e0b' },
-  { label: 'Visita → Negociación', corto: 'Negociación', digital: 25, noDigital: 28, color: '#f43f5e' },
-  { label: 'Negociación → Separación', corto: 'Separación', digital: 67, noDigital: 77, color: '#4ade80' },
+  { etapa: 'Contactado', corto: 'Contacto', digital: 67, noDigital: 95, color: '#6366f1' },
+  { etapa: 'Cita agendada', corto: 'Cita', digital: 20, noDigital: 80, color: '#22d3ee' },
+  { etapa: 'Visitado', corto: 'Visita', digital: 55, noDigital: 95, color: '#f59e0b' },
+  { etapa: 'Negociación', corto: 'Negociación', digital: 25, noDigital: 28, color: '#f43f5e' },
+  { etapa: 'Separación', corto: 'Separación', digital: 67, noDigital: 77, color: '#4ade80' },
 ];
+
+/**
+ * La misma referencia, leída desde el arranque del embudo: de cada 100
+ * interesados, cuántos llegan a esta etapa.
+ *
+ * Es la lectura que pidió Mercadeo y la que sirve para planear: dice cuántos
+ * leads hay que meter arriba para sacar una separación abajo. La tasa etapa a
+ * etapa no lo dice —un 67% de Negociación a Separación suena bien y esconde
+ * que sólo 1,8 de cada 100 llegaron a negociar.
+ */
+export interface TasaAcumulada extends Omit<TasaMercado, 'digital' | 'noDigital'> {
+  /** % de los interesados que llega a esta etapa, canal digital. */
+  digital: number;
+  /** % de los interesados que llega a esta etapa, canal no digital. */
+  noDigital: number;
+}
+
+export function tasasDesdeInteresado(): TasaAcumulada[] {
+  let dig = 100;
+  let nodig = 100;
+  return TASAS_MERCADO.map((t) => {
+    dig = (dig * t.digital) / 100;
+    nodig = (nodig * t.noDigital) / 100;
+    return { ...t, digital: dig, noDigital: nodig };
+  });
+}
+
+/**
+ * Metas de las etapas intermedias del embudo.
+ *
+ * No se cargan a mano: salen de la meta de leads multiplicada por las tasas de
+ * `tasasDesdeInteresado()`. Por eso viven aparte de `META` —ahí sólo va lo que
+ * Mercadeo teclea— y por eso dependen del canal.
+ */
+export interface MetasEtapa {
+  citas: number;
+  visitas: number;
+  negociaciones: number;
+  separaciones: number;
+}
+
+/** Metas base que Mercadeo carga a mano. Todo lo demás se deriva de aquí. */
+export interface MetaBase {
+  leads: number;
+  cierres: number;
+}
 
 export interface Goal {
   leads: number;
-  citas: number;
-  visitas: number;
   cierres: number;
-  /** Tasa de cierre objetivo, en %. */
+  /** Tasa de cierre objetivo, en %. Derivada: `cierres / leads`. */
   tasa: number;
+  /**
+   * Metas de etapa del canal filtrado. `null` cuando la barra no tiene canal
+   * escogido: cada canal tiene su propia tasa y no hay una sola que aplique.
+   * Promediarlas inventaría un número que no es de nadie.
+   */
+  etapas: MetasEtapa | null;
+  /** Las dos referencias, para mostrarlas lado a lado cuando no hay canal. */
+  porCanal: { digital: MetasEtapa; noDigital: MetasEtapa };
 }
 
 /**
  * Metas mensuales por proyecto.
  * ⚠️ No existe en Pipedrive — se actualiza a mano.
  * La clave es el índice en `PROJECTS`; Tinguazul 1 comparte la meta de 2A.
+ *
+ * Sólo dos números por proyecto: los leads que Mercadeo se compromete a meter
+ * arriba del embudo, y los cierres que Comercial se compromete a sacar abajo.
+ * Citas, visitas, negociaciones y separaciones ya **no** se teclean: son el
+ * resultado de aplicarle a los leads las tasas de mercado, así que no pueden
+ * contradecirlas.
+ *
+ * Los cierres siguen siendo la meta comercial pactada (3/mes) y no el 4,4% que
+ * darían las tasas — decisión de Sebas el 23-sep-2026. Es el único punto donde
+ * la meta se aparta de la fórmula, y es a propósito: subirla a 13 cuadruplica
+ * el compromiso con Gerencia y eso no se cambia desde un archivo de config.
  */
-export const META: Record<number, Goal> = {
-  0: { leads: 314, citas: 66, visitas: 42, cierres: 3, tasa: 0.96 },
-  1: { leads: 296, citas: 82, visitas: 63, cierres: 3, tasa: 1.01 },
-  2: { leads: 296, citas: 82, visitas: 63, cierres: 3, tasa: 1.01 },
+export const META: Record<number, MetaBase> = {
+  0: { leads: 296, cierres: 3 },
+  1: { leads: 296, cierres: 3 },
+  2: { leads: 296, cierres: 3 },
 };
+
+/**
+ * Metas de etapa para una meta de leads y un canal.
+ *
+ * `null` en `digital` significa "sin canal escogido", y entonces no hay metas
+ * de etapa: ver el comentario de `Goal.etapas`.
+ */
+export function metasEtapa(leads: number, digital: boolean): MetasEtapa {
+  const t = tasasDesdeInteresado();
+  const pct = (i: number) => Math.round((leads * (digital ? t[i].digital : t[i].noDigital)) / 100);
+  // Los índices siguen el orden de TASAS_MERCADO: 0 Contactado, 1 Cita,
+  // 2 Visitado, 3 Negociación, 4 Separación.
+  return {
+    citas: pct(1),
+    visitas: pct(2),
+    negociaciones: pct(3),
+    separaciones: pct(4),
+  };
+}
 
 /**
  * Fuentes que cuentan como tráfico digital. Se comparan normalizadas

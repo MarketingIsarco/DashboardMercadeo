@@ -296,8 +296,10 @@ function Cumplimiento({
   // distintos presentes (supuesto: la meta se repite igual cada mes).
   const goal = goalFor(filters);
   const months = new Set(leads.map((l) => l.month)).size || 1;
-  const metaCitas = goal ? goal.citas * months : null;
-  const metaVisitas = goal ? goal.visitas * months : null;
+  // Las metas de etapa dependen del canal filtrado. Sin canal escogido no hay
+  // una sola meta que aplique, así que esta banda de cumplimiento no se pinta.
+  const metaCitas = goal?.etapas ? goal.etapas.citas * months : null;
+  const metaVisitas = goal?.etapas ? goal.etapas.visitas * months : null;
 
   return (
     <>

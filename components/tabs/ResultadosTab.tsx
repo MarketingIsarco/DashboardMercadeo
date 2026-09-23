@@ -19,6 +19,8 @@ import { firstName, monthLabel, pct, pctNum } from '@/lib/format';
 import {
   computeKpis,
   goalFor,
+  metaEtapa,
+  deltaEtapa,
   isCita,
   isPerdido,
   isVenta,
@@ -73,15 +75,17 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             size="xs"
             label="Citas"
             value={k.citas}
-            meta={`${pct(k.citas, k.total)}% de leads`}
-            delta={metaVolumen ? pctNum(k.citas - metaVolumen.citas, metaVolumen.citas) : null}
+            meta={metaEtapa(goal, 'citas')}
+            delta={deltaEtapa(metaVolumen, 'citas', k.citas)}
+            sub={`${pct(k.citas, k.total)}% de leads`}
           />
           <Kpi
             size="xs"
             label="Visitas"
             value={k.visitas}
-            meta={`${pct(k.visitas, k.total)}% de leads`}
-            delta={metaVolumen ? pctNum(k.visitas - metaVolumen.visitas, metaVolumen.visitas) : null}
+            meta={metaEtapa(goal, 'visitas')}
+            delta={deltaEtapa(metaVolumen, 'visitas', k.visitas)}
+            sub={`${pct(k.visitas, k.total)}% de leads`}
           />
           {/* Etapa alcanzada, igual que citas y visitas. Cierra el hueco que
               había entre la visita y la separación. */}
@@ -89,10 +93,18 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             size="xs"
             label="Negociaciones"
             value={k.negociaciones}
-            meta={`${pct(k.negociaciones, k.total)}% de leads`}
-            sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+            meta={metaEtapa(goal, 'negociaciones')}
+            delta={deltaEtapa(metaVolumen, 'negociaciones', k.negociaciones)}
+            sub={`${pct(k.negociaciones, k.total)}% de leads`}
           />
-          <Kpi size="xs" label="Separaciones" value={k.separaciones} meta={`${pct(k.separaciones, k.total)}% de leads`} />
+          <Kpi
+            size="xs"
+            label="Separaciones"
+            value={k.separaciones}
+            meta={metaEtapa(goal, 'separaciones')}
+            delta={deltaEtapa(metaVolumen, 'separaciones', k.separaciones)}
+            sub={`${pct(k.separaciones, k.total)}% de leads`}
+          />
           <Kpi size="xs" label="Ventas" value={ventas.length} meta="Separación + Ganados" />
           <Kpi
             size="xs"

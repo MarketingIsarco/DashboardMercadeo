@@ -1,4 +1,4 @@
-import { TASAS_MERCADO } from '@/lib/config/negocio';
+import { tasasDesdeInteresado } from '@/lib/config/negocio';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -10,11 +10,26 @@ import { TASAS_MERCADO } from '@/lib/config/negocio';
  * voz alta — una fila de porcentajes en medio de un dashboard se lee como una
  * medición si nadie aclara que no lo es.
  *
+ * Muestra el **acumulado desde Interesado**, no el paso a paso: de cada 100
+ * interesados, cuántos llegan a esa etapa. La configuración guarda el paso a
+ * paso y `tasasDesdeInteresado()` lo encadena, así que editar un paso mueve
+ * esa tarjeta y todas las que vienen después — que es justo lo que pasa en la
+ * realidad.
+ *
  * Un solo componente para las cinco pestañas, no cinco copias: son cifras que
  * Mercadeo va a querer actualizar, y actualizarlas en cinco archivos es la
  * forma segura de que tres queden viejas.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+
+/**
+ * Dos decimales por debajo de 10, uno por encima. El fondo del embudo digital
+ * cae a 1,23% y redondearlo a un decimal borra la diferencia entre etapas que
+ * en la práctica son muy distintas.
+ */
+function pct(v: number): string {
+  return v >= 10 ? v.toFixed(1) : v.toFixed(2);
+}
 
 export function TasasMercado({
   /**
@@ -35,6 +50,7 @@ export function TasasMercado({
 }) {
   const ambos = digital === null;
   const canal = ambos ? 'Digital y No digital' : digital ? 'Digital' : 'No digital';
+  const tasas = tasasDesdeInteresado();
 
   return (
     <div className="mt-5">
@@ -42,13 +58,14 @@ export function TasasMercado({
         Tasas de conversión de mercado · <span className="text-muted">{canal}</span>
       </h3>
       <p className="mb-2 text-2xs text-muted">
-        Estándar del sector paso a paso del embudo. {nota}
+        Estándar del sector, acumulado <b>desde Interesado</b>: de cada 100 interesados, cuántos llegan a esa etapa.{' '}
+        {nota}
       </p>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {TASAS_MERCADO.map((t, i) => (
+        {tasas.map((t, i) => (
           <div
-            key={t.label}
+            key={t.etapa}
             className="rounded-lg border border-[#e8eaf2] bg-card px-3 py-2"
             // El color del paso va en el borde izquierdo y en la cifra. Sólo en
             // la cifra se perdía en la retícula; sólo en el borde no se asocia
@@ -63,7 +80,7 @@ export function TasasMercado({
                 {i + 1}
               </span>
               <span className="text-[10px] font-semibold uppercase leading-tight tracking-wide text-dim">
-                {t.label}
+                {t.etapa}
               </span>
             </div>
 
@@ -71,20 +88,20 @@ export function TasasMercado({
               <div className="mt-1 flex items-baseline gap-3">
                 <span>
                   <span className="text-[19px] font-extrabold leading-none" style={{ color: t.color }}>
-                    {t.digital}%
+                    {pct(t.digital)}%
                   </span>
                   <span className="ml-1 text-[10px] text-muted">dig.</span>
                 </span>
                 <span>
                   <span className="text-[19px] font-extrabold leading-none" style={{ color: t.color }}>
-                    {t.noDigital}%
+                    {pct(t.noDigital)}%
                   </span>
                   <span className="ml-1 text-[10px] text-muted">no dig.</span>
                 </span>
               </div>
             ) : (
               <div className="mt-1 text-[26px] font-extrabold leading-none" style={{ color: t.color }}>
-                {digital ? t.digital : t.noDigital}%
+                {pct(digital ? t.digital : t.noDigital)}%
               </div>
             )}
           </div>
@@ -93,7 +110,8 @@ export function TasasMercado({
 
       <p className="mt-1.5 text-2xs text-muted">
         Cifras de referencia cargadas a mano, no calculadas con los leads del tablero: no se mueven con los filtros de
-        periodo, proyecto ni etapa. Se editan en <code>TASAS_MERCADO</code>.
+        periodo, proyecto ni etapa. En <code>TASAS_MERCADO</code> se edita la tasa de cada paso; lo que se ve aquí es
+        el encadenado desde Interesado.
       </p>
     </div>
   );

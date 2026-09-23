@@ -55,6 +55,7 @@ import {
   availableMonths,
   computeKpis,
   goalFor,
+  metaEtapa,
   isCita,
   isGanado,
   isPerdido,
@@ -225,7 +226,7 @@ function KpiSection({
           label="Citas+"
           value={k.citas}
           meta={`${pct(k.citas, k.total)}% de leads`}
-          sub={`Meta: ${goal ? goal.citas : 'N/A'}/mes`}
+          sub={metaEtapa(goal, 'citas') ?? 'Meta: N/A'}
           delta={prevK ? delta(k.citas, prevK.citas) : null}
           deltaSuffix=""
         />
@@ -234,7 +235,7 @@ function KpiSection({
           label="Visitas"
           value={k.visitas}
           meta={`${pct(k.visitas, k.total)}% de leads`}
-          sub={`Meta: ${goal ? goal.visitas : 'N/A'}/mes`}
+          sub={metaEtapa(goal, 'visitas') ?? 'Meta: N/A'}
           delta={prevK ? delta(k.visitas, prevK.visitas) : null}
           deltaSuffix=""
         />
@@ -245,17 +246,18 @@ function KpiSection({
           label="Negociaciones"
           value={k.negociaciones}
           meta={`${pct(k.negociaciones, k.total)}% de leads`}
-          sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+          sub={metaEtapa(goal, 'negociaciones') ?? 'Meta: N/A'}
           delta={prevK ? delta(k.negociaciones, prevK.negociaciones) : null}
           deltaSuffix=""
         />
-        {/* La separación es el paso previo al cierre, así que comparte su meta. */}
+        {/* La separación ya tiene meta propia, derivada de las tasas de
+            mercado. Antes usaba prestada la de cierres, que es otra cosa. */}
         <Kpi
           size="xs"
           label="Separación"
           value={k.separaciones}
           meta={`${pct(k.separaciones, k.total)}% de leads`}
-          sub={`Meta: ${goal ? goal.cierres : 'N/A'}/mes`}
+          sub={metaEtapa(goal, 'separaciones') ?? 'Meta: N/A'}
         />
         <Kpi
           size="xs"
@@ -395,9 +397,9 @@ function Timeline({
         // Antes se calculaba así y daba 61 donde la meta real son 105: la
         // tarjeta de Visitas del capítulo 01 y esta línea decían cosas
         // distintas sobre el mismo objetivo.
-        metaVis = goal.visitas;
+        metaVis = goal.etapas ? goal.etapas.visitas : null;
         metaLeadsLabel = `Meta leads (${goal.leads}/mes)`;
-        metaVisLabel = `Meta visitas (${metaVis}/mes)`;
+        metaVisLabel = metaVis === null ? 'Meta visitas' : `Meta visitas (${metaVis}/mes)`;
       }
     } else {
       // Semana (lunes ISO) o día. Bucket por clave temporal.
@@ -425,10 +427,10 @@ function Timeline({
         // se sacara de la de leads ya prorrateada, el redondeo las desalinearía.
         const div = gran === 'week' ? 4.3 : 30;
         metaLeads = Math.round(goal.leads / div);
-        metaVis = Math.round(goal.visitas / div);
+        metaVis = goal.etapas ? Math.round(goal.etapas.visitas / div) : null;
         const unit = gran === 'week' ? 'sem' : 'día';
         metaLeadsLabel = `Meta leads (${metaLeads}/${unit})`;
-        metaVisLabel = `Meta visitas (${metaVis}/${unit})`;
+        metaVisLabel = metaVis === null ? 'Meta visitas' : `Meta visitas (${metaVis}/${unit})`;
       }
     }
     return { labels, counts, vis, metaLeads, metaVis, metaLeadsLabel, metaVisLabel };
