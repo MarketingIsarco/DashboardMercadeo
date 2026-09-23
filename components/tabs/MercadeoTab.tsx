@@ -221,6 +221,17 @@ function KpiSection({
           delta={prevK ? delta(k.total, prevK.total) : null}
           deltaSuffix=""
         />
+        {/* Primer escalón real del embudo: la diferencia contra Leads son los
+            que nadie tocó todavía. */}
+        <Kpi
+          size="xs"
+          label="Contactados"
+          value={k.contactados}
+          meta={`${pct(k.contactados, k.total)}% de leads`}
+          sub={metaEtapa(goal, 'contactados') ?? 'Meta: N/A'}
+          delta={prevK ? delta(k.contactados, prevK.contactados) : null}
+          deltaSuffix=""
+        />
         <Kpi
           size="xs"
           label="Citas+"
@@ -258,15 +269,6 @@ function KpiSection({
           value={k.separaciones}
           meta={`${pct(k.separaciones, k.total)}% de leads`}
           sub={metaEtapa(goal, 'separaciones') ?? 'Meta: N/A'}
-        />
-        <Kpi
-          size="xs"
-          label="Cierres"
-          value={k.ganados}
-          meta={`${pct(k.ganados, k.total)}% de leads`}
-          sub={`Meta: ${goal ? goal.cierres : 'N/A'}/mes`}
-          delta={prevK ? delta(k.ganados, prevK.ganados) : null}
-          deltaSuffix=""
         />
         <Kpi
           size="xs"

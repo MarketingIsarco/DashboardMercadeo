@@ -71,6 +71,7 @@ export const STAGE_TO_IDX: Record<string, number> = {
 };
 
 /** Umbrales del embudo, por índice de etapa. */
+export const STAGE_CONTACTADO = 1;
 export const STAGE_CITA = 2;
 export const STAGE_VISITA = 3;
 export const STAGE_NEGOCIACION = 4;
@@ -642,6 +643,7 @@ export function tasasDesdeInteresado(): TasaAcumulada[] {
  * Mercadeo teclea— y por eso dependen del canal.
  */
 export interface MetasEtapa {
+  contactados: number;
   citas: number;
   visitas: number;
   negociaciones: number;
@@ -703,6 +705,7 @@ export function metasEtapa(leads: number, digital: boolean): MetasEtapa {
   // Los índices siguen el orden de TASAS_MERCADO: 0 Contactado, 1 Cita,
   // 2 Visitado, 3 Negociación, 4 Separación.
   return {
+    contactados: pct(0),
     citas: pct(1),
     visitas: pct(2),
     negociaciones: pct(3),

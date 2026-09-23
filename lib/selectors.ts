@@ -2,6 +2,7 @@ import {
   CONSTRUCTORA_IDX,
   META,
   metasEtapa,
+  STAGE_CONTACTADO,
   MIN_YEAR,
   STAGE_CITA,
   STAGE_NEGOCIACION,
@@ -66,6 +67,9 @@ export const defaultFilters: FilterState = {
   dateTo: null,
 };
 
+export function isContactado(l: Lead): boolean {
+  return l.stage >= STAGE_CONTACTADO;
+}
 export function isCita(l: Lead): boolean {
   return l.stage >= STAGE_CITA;
 }
@@ -162,6 +166,12 @@ export function keyOf(lead: Lead): string {
 
 export interface Kpis {
   total: number;
+  /**
+   * Leads que **alcanzaron** Contactado, con el mismo criterio que citas y
+   * visitas (`stage >= X`). Es el primer escalón real del embudo: la diferencia
+   * contra el total son los leads que nadie tocó todavía.
+   */
+  contactados: number;
   citas: number;
   visitas: number;
   /**
@@ -189,6 +199,7 @@ export function computeKpis(f: Lead[]): Kpis {
 
   return {
     total: f.length,
+    contactados: f.filter(isContactado).length,
     citas: f.filter(isCita).length,
     visitas: f.filter(isVisita).length,
     negociaciones: f.filter(isNegociacion).length,

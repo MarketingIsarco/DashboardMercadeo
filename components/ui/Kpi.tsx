@@ -17,16 +17,19 @@ export interface KpiProps {
    * · `'xs'` es para las filas de siete u ocho indicadores que tienen que
    *   caber en una sola línea. Baja también el rótulo y el relleno, porque a
    *   ese ancho lo que desborda primero es "CIERRES PROYECTADOS", no la cifra.
+   * · `'xxs'` es el mismo caso llevado a nueve tarjetas: el embudo completo,
+   *   de Leads a Cierres proyectados. Un embudo partido en dos filas se lee
+   *   como dos cosas distintas, así que aquí encoge el texto y no la fila.
    */
-  size?: 'md' | 'sm' | 'xs';
+  size?: 'md' | 'sm' | 'xs' | 'xxs';
 }
 
-const VALUE_SIZE = { md: 'text-[28px]', sm: 'text-[21px]', xs: 'text-[19px]' } as const;
-const LABEL_SIZE = { md: 'text-[11px]', sm: 'text-[11px]', xs: 'text-[9px]' } as const;
-const META_SIZE = { md: 'text-[11px]', sm: 'text-[11px]', xs: 'text-[9px]' } as const;
+const VALUE_SIZE = { md: 'text-[28px]', sm: 'text-[21px]', xs: 'text-[19px]', xxs: 'text-[17px]' } as const;
+const LABEL_SIZE = { md: 'text-[11px]', sm: 'text-[11px]', xs: 'text-[9px]', xxs: 'text-[8px]' } as const;
+const META_SIZE = { md: 'text-[11px]', sm: 'text-[11px]', xs: 'text-[9px]', xxs: 'text-[8px]' } as const;
 // Las utilidades de Tailwind ganan sobre el `@apply` de `.kpi-card`, que es
 // capa de componentes: basta con añadir el padding más apretado.
-const PAD = { md: '', sm: '', xs: 'px-2 py-2.5' } as const;
+const PAD = { md: '', sm: '', xs: 'px-2 py-2.5', xxs: 'px-1.5 py-2' } as const;
 
 export function Kpi({ label, value, meta, delta, deltaSuffix = '%', sub, size = 'md' }: KpiProps) {
   const showDelta = delta !== null && delta !== undefined && Number.isFinite(delta);

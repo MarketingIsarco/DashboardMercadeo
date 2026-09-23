@@ -63,16 +63,26 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         title="01 · Indicadores Generales"
         sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
       >
-        <KpiGrid cols={8}>
+        <KpiGrid cols={9}>
           <Kpi
-            size="xs"
+            size="xxs"
             label="Leads"
             value={k.total.toLocaleString('es-CO')}
             meta={goal ? `Meta ${goal.leads}/mes` : undefined}
             delta={metaVolumen ? pctNum(k.total - metaVolumen.leads, metaVolumen.leads) : null}
           />
+          {/* Primer escalón real del embudo: la diferencia contra Leads son
+              los que nadie tocó todavía. */}
           <Kpi
-            size="xs"
+            size="xxs"
+            label="Contactados"
+            value={k.contactados}
+            meta={metaEtapa(goal, 'contactados')}
+            delta={deltaEtapa(metaVolumen, 'contactados', k.contactados)}
+            sub={`${pct(k.contactados, k.total)}% de leads`}
+          />
+          <Kpi
+            size="xxs"
             label="Citas"
             value={k.citas}
             meta={metaEtapa(goal, 'citas')}
@@ -80,7 +90,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             sub={`${pct(k.citas, k.total)}% de leads`}
           />
           <Kpi
-            size="xs"
+            size="xxs"
             label="Visitas"
             value={k.visitas}
             meta={metaEtapa(goal, 'visitas')}
@@ -90,7 +100,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
           {/* Etapa alcanzada, igual que citas y visitas. Cierra el hueco que
               había entre la visita y la separación. */}
           <Kpi
-            size="xs"
+            size="xxs"
             label="Negociaciones"
             value={k.negociaciones}
             meta={metaEtapa(goal, 'negociaciones')}
@@ -98,16 +108,16 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             sub={`${pct(k.negociaciones, k.total)}% de leads`}
           />
           <Kpi
-            size="xs"
+            size="xxs"
             label="Separaciones"
             value={k.separaciones}
             meta={metaEtapa(goal, 'separaciones')}
             delta={deltaEtapa(metaVolumen, 'separaciones', k.separaciones)}
             sub={`${pct(k.separaciones, k.total)}% de leads`}
           />
-          <Kpi size="xs" label="Ventas" value={ventas.length} meta="Separación + Ganados" />
+          <Kpi size="xxs" label="Ventas" value={ventas.length} meta="Separación + Ganados" />
           <Kpi
-            size="xs"
+            size="xxs"
             label="Tasa de cierre"
             value={`${tasaCierre.toFixed(2)}%`}
             meta={goal ? `Meta ${goal.tasa.toFixed(2)}%` : undefined}
@@ -115,7 +125,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             deltaSuffix=" pp"
           />
           <Kpi
-            size="xs"
+            size="xxs"
             label="Cierres proyectados"
             value={k.cierresProyectados}
             sub={`${k.enNegociacion} en negociación · ${k.enSeparacion} en separación`}
