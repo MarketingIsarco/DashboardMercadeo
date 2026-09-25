@@ -25,9 +25,8 @@ import {
   isPerdido,
   isVisita,
   keyOf,
-  mesVenta,
+  mesGanado,
   timeAxisCon,
-  ventasDelPeriodo,
 } from '@/lib/selectors';
 import type { TabProps } from '@/lib/selectors';
 import type { Lead, SaleDeal } from '@/lib/types';
@@ -44,9 +43,9 @@ export function ResultadosTab({ data, filtered, ganados, filters, meta }: TabPro
   const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
   const goal = useMemo(() => goalFor(filters), [filters]);
 
-  // Los ganados entran por fecha de ganado, las separaciones abiertas por la
-  // de creación: ver `ventasDelPeriodo`.
-  const ventas = useMemo(() => ventasDelPeriodo(filtered, ganados), [filtered, ganados]);
+  // Venta = trato **ganado**, por fecha de ganado. Las separaciones no suman:
+  // son plata comprometida, no una venta cerrada.
+  const ventas = ganados;
   const perdidos = useMemo(() => filtered.filter(isPerdido), [filtered]);
 
   const tasaCierre = pctNum(ventas.length, filtered.length);
@@ -118,7 +117,7 @@ export function ResultadosTab({ data, filtered, ganados, filters, meta }: TabPro
             delta={deltaEtapa(metaVolumen, 'separaciones', k.separaciones)}
             sub={`${pct(k.separaciones, k.total)}% de leads`}
           />
-          <Kpi size="xxs" label="Ventas" value={ventas.length} meta="Separación + Ganados" />
+          <Kpi size="xxs" label="Ventas" value={ventas.length} meta="Tratos ganados" />
           <Kpi
             size="xxs"
             label="Tasa de cierre"
@@ -456,7 +455,7 @@ function TrendChart({
     return {
       // Las ventas se ubican por su mes de venta (ganado → `won_time`); citas
       // y visitas, por el de creación del lead.
-      v: ventas.filter((l) => mesVenta(l) === key).length,
+      v: ventas.filter((l) => mesGanado(l) === key).length,
       vis: rows.filter(isVisita).length,
       c: rows.filter(isCita).length,
     };
@@ -545,7 +544,7 @@ function WinLossTrend({
   const ta = timeAxisCon(leads, ventas);
   const buckets = ta.keys.map((key) => {
     const rows = leads.filter((l) => keyOf(l) === key);
-    return { v: ventas.filter((l) => mesVenta(l) === key).length, p: rows.filter(isPerdido).length };
+    return { v: ventas.filter((l) => mesGanado(l) === key).length, p: rows.filter(isPerdido).length };
   });
 
   return (
@@ -607,18 +606,9 @@ function SalesTable({ sales, ventas }: { sales: SaleDeal[]; ventas: Lead[] }) {
     () => sales.filter((s) => ids.has(s.id)).sort((a, b) => b.date.localeCompare(a.date)),
     [sales, ids],
   );
-  const pendientes = rows.filter((r) => r.status === 'Abierto').length;
 
   return (
-    <Section
-      title="05 · Detalle de Ventas"
-      sub={
-        <>
-          Leads que llegaron a Separación o quedaron marcados como Ganado
-          {pendientes > 0 ? ` · ${pendientes} con separación pendiente de actualizar estado en Pipedrive` : ''}
-        </>
-      }
-    >
+    <Section title="05 · Detalle de Ventas" sub="Tratos ganados en el periodo, por fecha de ganado">
       <DataTable
         rows={rows}
         maxHeight={380}

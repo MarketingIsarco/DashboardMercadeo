@@ -25,7 +25,7 @@ import {
   todayISO,
 } from '@/lib/gestion';
 import type { ActivityState, SerieAsesor } from '@/lib/gestion';
-import { applyFilters, isAbierto, isPerdido, mesVenta, ventasDelPeriodo } from '@/lib/selectors';
+import { applyFilters, isAbierto, isPerdido, mesGanado } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { ActivityDay, DashboardData, Lead, Meeting, Meta } from '@/lib/types';
 
@@ -165,8 +165,8 @@ function Pulso({
 }) {
   const curM = today.slice(0, 7);
   const delMes = leads.filter((l) => l.month === curM);
-  // Ganados del mes por fecha de ganado; separaciones abiertas por creación.
-  const cierres = ventasDelPeriodo(leads, ganados).filter((l) => mesVenta(l) === curM).length;
+  // Ventas = tratos ganados en el mes, por fecha de ganado. Sin separaciones.
+  const cierres = ganados.filter((l) => mesGanado(l) === curM).length;
 
   const states = open.map((l) => activityState(l, today));
   const vencidos = states.filter((s) => s === 'vencida').length;
@@ -175,7 +175,7 @@ function Pulso({
   return (
     <KpiGrid cols={5}>
       <Kpi label="Leads este mes" value={delMes.length.toLocaleString('es-CO')} meta={`Acumulado ${monthLabel(curM)}`} />
-      <Kpi label="Cierres este mes" value={cierres} meta="Separación + Ganados" />
+      <Kpi label="Ventas este mes" value={cierres} meta="Tratos ganados" />
       <Kpi
         label="Tasa de cierre"
         value={`${pct(cierres, delMes.length)}%`}
@@ -200,8 +200,7 @@ function Tendencia({ leads, ganados, today }: { leads: Lead[]; ganados: Lead[]; 
   });
 
   const leadsPorMes = months.map((m) => leads.filter((l) => l.month === m).length);
-  const ventas = ventasDelPeriodo(leads, ganados);
-  const cierresPorMes = months.map((m) => ventas.filter((l) => mesVenta(l) === m).length);
+  const cierresPorMes = months.map((m) => ganados.filter((l) => mesGanado(l) === m).length);
 
   const data: MixedData = {
     labels,
@@ -217,7 +216,7 @@ function Tendencia({ leads, ganados, today }: { leads: Lead[]; ganados: Lead[]; 
       },
       {
         type: 'line',
-        label: 'Cierres',
+        label: 'Ventas',
         data: cierresPorMes,
         borderColor: '#c9a96e',
         backgroundColor: '#c9a96e',

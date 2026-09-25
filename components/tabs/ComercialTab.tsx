@@ -122,7 +122,7 @@ export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
         title="01 · KPIs Generales"
         sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
       >
-        <KpiGrid cols={7}>
+        <KpiGrid cols={8}>
           <Kpi size="xs" label="Total Leads" value={k.total.toLocaleString('es-CO')} meta="Activos, perdidos y ganados" />
           <Kpi size="xs" label="Citas agendadas" value={k.citas} meta={`${pct(k.citas, k.total)}% del total`} />
           <Kpi size="xs" label="Visitas realizadas" value={k.visitas} meta={`${pct(k.visitas, k.total)}% del total`} />
@@ -133,6 +133,14 @@ export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
             value={k.negociaciones}
             meta={`${pct(k.negociaciones, k.total)}% del total`}
             sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+          />
+          {/* Venta = trato ganado, por fecha de ganado. Las separaciones no suman. */}
+          <Kpi
+            size="xs"
+            label="Ventas"
+            value={k.ganados}
+            meta={`${pct(k.ganados, k.total)}% del total`}
+            sub={`${pct(k.ganados, k.visitas)}% de las visitas`}
           />
           <Kpi size="xs" label="Tasa Lead→Cita" value={`${pct(k.citas, k.total)}%`} meta={`${k.citas} citas de ${k.total} leads`} />
           <Kpi

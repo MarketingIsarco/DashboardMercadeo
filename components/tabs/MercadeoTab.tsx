@@ -60,6 +60,7 @@ import {
   isPerdido,
   isVisita,
   keyOf,
+  ganadosDelPeriodo,
   mesGanado,
   timeAxis,
   timeAxisCon,
@@ -88,7 +89,7 @@ export function MercadeoTab({ data, filtered, ganados, filters, meta }: TabProps
   return (
     <>
       {/* 01 · Indicadores Generales */}
-      <KpiSection data={data} filtered={filtered} filters={filters} meta={meta} goal={goal} />
+      <KpiSection data={data} filtered={filtered} ganados={ganados} filters={filters} meta={meta} goal={goal} />
 
       {/* 02 · Pipeline */}
       <Section title="02 · Pipeline" sub="Estado del embudo, evolución temporal y comparativo mensual">
@@ -173,17 +174,19 @@ export function MercadeoTab({ data, filtered, ganados, filters, meta }: TabProps
 function KpiSection({
   data,
   filtered,
+  ganados,
   filters,
   meta,
   goal,
 }: {
   data: TabProps['data'];
   filtered: Lead[];
+  ganados: Lead[];
   filters: FilterState;
   meta: Meta;
   goal: ReturnType<typeof goalFor>;
 }) {
-  const k = useMemo(() => computeKpis(filtered), [filtered]);
+  const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
 
   // Delta contra el mes anterior: sólo cuando hay exactamente un mes seleccionado.
   // El "mes anterior" es el inmediatamente previo dentro de los meses presentes en
@@ -199,7 +202,10 @@ function KpiSection({
       months: [prevM],
       exMonths: filters.exMonths.filter((m) => m !== prevM),
     };
-    return computeKpis(applyFilters(data.leads, prevFilters, meta.digitalSources));
+    return computeKpis(
+      applyFilters(data.leads, prevFilters, meta.digitalSources),
+      ganadosDelPeriodo(data.leads, prevFilters, meta.digitalSources),
+    );
   }, [data.leads, filters, meta.digitalSources]);
 
   const delta = (cur: number, prev: number | undefined): number | null => {
@@ -213,7 +219,7 @@ function KpiSection({
       title="01 · Indicadores Generales"
       sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
     >
-      <KpiGrid cols={7}>
+      <KpiGrid cols={8}>
         <Kpi
           size="xs"
           label="Leads"
@@ -270,6 +276,16 @@ function KpiSection({
           value={k.separaciones}
           meta={`${pct(k.separaciones, k.total)}% de leads`}
           sub={metaEtapa(goal, 'separaciones') ?? 'Meta: N/A'}
+        />
+        {/* Venta = trato ganado, por fecha de ganado. Las separaciones no suman. */}
+        <Kpi
+          size="xs"
+          label="Ventas"
+          value={k.ganados}
+          meta={`${pct(k.ganados, k.total)}% de leads`}
+          sub={goal ? `Meta ${goal.cierres}/mes` : 'Meta: N/A'}
+          delta={prevK ? delta(k.ganados, prevK.ganados) : null}
+          deltaSuffix=""
         />
         <Kpi
           size="xs"

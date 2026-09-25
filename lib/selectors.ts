@@ -185,7 +185,11 @@ export function ganadosDelPeriodo(leads: Lead[], st: FilterState, digitalSources
 }
 
 /**
- * "Ventas" del periodo = separaciones que el CRM todavía no marcó como ganadas
+ * Separaciones + ganados del periodo. **No es "Ventas"**: una venta es sólo un
+ * trato ganado, y para eso está `ganados` directamente. Esto queda para las
+ * series rotuladas "Sep+Cierres" / "% Ganados/Sep".
+ *
+ * Separaciones que el CRM todavía no marcó como ganadas
  * (por fecha de creación, que es la única que tienen) + los ganados del
  * periodo por fecha de ganado.
  *
