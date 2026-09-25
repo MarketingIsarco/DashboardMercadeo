@@ -17,6 +17,7 @@ import {
   filasPorCampana,
   filasPorFuente,
   filasPorMotivo,
+  ganadosPorMes,
   intensidad,
   leadsPorMes,
   tasa,
@@ -117,7 +118,13 @@ export function ComparativoTab({ data, meta }: TabProps) {
 
     const ventana = ventanaTrimestre(cierre);
     const porMes = leadsPorMes(data.leads, proyecto, scope, meta.digitalSources);
-    const cohortes = cohortesDeVentana(porMes, ventana, proyecto, scope);
+    const cohortes = cohortesDeVentana(
+      porMes,
+      ventana,
+      proyecto,
+      scope,
+      ganadosPorMes(data.leads, proyecto, scope, meta.digitalSources),
+    );
     const ultimo = ventana.length - 1;
 
     // Referencia del color: el promedio del propio proyecto en el período.
@@ -280,7 +287,7 @@ export function ComparativoTab({ data, meta }: TabProps) {
             { header: 'Abiertos', cell: (r) => n0(r.abiertos), align: 'right' },
             { header: '% abierto', cell: (r) => pc(tasa(r.abiertos, r.leads)), align: 'right' },
             { header: 'Perdidos', cell: (r) => n0(r.perdidos), align: 'right' },
-            { header: 'Ganados', cell: (r) => n0(r.ganados), align: 'right' },
+            { header: 'Ganados en el mes', cell: (r) => n0(r.ganados), align: 'right' },
             {
               header: 'Lectura',
               cell: (r) => {
@@ -398,7 +405,7 @@ export function ComparativoTab({ data, meta }: TabProps) {
             { header: 'Citas', cell: (r) => n0(r.citas), align: 'right' },
             { header: 'Lead a cita', cell: (r) => pc(tasa(r.citas, r.leads)), align: 'right' },
             { header: 'Visitas', cell: (r) => n0(r.visitas), align: 'right' },
-            { header: 'Ganados', cell: (r) => n0(r.ganados), align: 'right' },
+            { header: 'Ganados en el mes', cell: (r) => n0(r.ganados), align: 'right' },
             {
               header: 'Pérdida dominante',
               cell: (r) => <span className="text-dim">{r.motivoTop}</span>,

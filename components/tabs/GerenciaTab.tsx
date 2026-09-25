@@ -25,7 +25,7 @@ import {
   todayISO,
 } from '@/lib/gestion';
 import type { ActivityState, SerieAsesor } from '@/lib/gestion';
-import { applyFilters, isAbierto, isPerdido, isVenta } from '@/lib/selectors';
+import { applyFilters, isAbierto, isPerdido, mesVenta, ventasDelPeriodo } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { ActivityDay, DashboardData, Lead, Meeting, Meta } from '@/lib/types';
 
@@ -65,7 +65,7 @@ function lastMonths(today: string, n: number): string[] {
   return out;
 }
 
-export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
+export function GerenciaTab({ data, filtered, ganados, filters, meta }: TabProps) {
   // `today` se congela por render: si se recalculara dentro de cada tabla, dos
   // filas podrían quedar comparadas contra días distintos al cruzar medianoche.
   const today = useMemo(() => todayISO(), []);
@@ -78,13 +78,13 @@ export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
         title="01 · Pulso del Negocio"
         sub={`Corte al ${today} · ${open.length.toLocaleString('es-CO')} leads abiertos en el filtro actual`}
       >
-        <Pulso leads={filtered} open={open} today={today} />
+        <Pulso leads={filtered} ganados={ganados} open={open} today={today} />
         <TasasMercado digital={filters.digital} />
         <div className="mt-6 grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Tendencia Leads vs Cierres (últimos 6 meses)</h3>
             <p className="mb-2 text-2xs text-muted">Volumen mensual y efectividad comercial</p>
-            <Tendencia leads={filtered} today={today} />
+            <Tendencia leads={filtered} ganados={ganados} today={today} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Mix de Proyectos — Pipeline Activo</h3>
@@ -152,10 +152,21 @@ export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
 // ─────────────────────────────────────────────────────────────────────
 // 01 · Pulso del Negocio
 // ─────────────────────────────────────────────────────────────────────
-function Pulso({ leads, open, today }: { leads: Lead[]; open: Lead[]; today: string }) {
+function Pulso({
+  leads,
+  ganados,
+  open,
+  today,
+}: {
+  leads: Lead[];
+  ganados: Lead[];
+  open: Lead[];
+  today: string;
+}) {
   const curM = today.slice(0, 7);
   const delMes = leads.filter((l) => l.month === curM);
-  const cierres = delMes.filter(isVenta).length;
+  // Ganados del mes por fecha de ganado; separaciones abiertas por creación.
+  const cierres = ventasDelPeriodo(leads, ganados).filter((l) => mesVenta(l) === curM).length;
 
   const states = open.map((l) => activityState(l, today));
   const vencidos = states.filter((s) => s === 'vencida').length;
@@ -181,7 +192,7 @@ function Pulso({ leads, open, today }: { leads: Lead[]; open: Lead[]; today: str
   );
 }
 
-function Tendencia({ leads, today }: { leads: Lead[]; today: string }) {
+function Tendencia({ leads, ganados, today }: { leads: Lead[]; ganados: Lead[]; today: string }) {
   const months = useMemo(() => lastMonths(today, 6), [today]);
   const labels = months.map((m) => {
     const [y, mo] = m.split('-');
@@ -189,7 +200,8 @@ function Tendencia({ leads, today }: { leads: Lead[]; today: string }) {
   });
 
   const leadsPorMes = months.map((m) => leads.filter((l) => l.month === m).length);
-  const cierresPorMes = months.map((m) => leads.filter((l) => l.month === m && isVenta(l)).length);
+  const ventas = ventasDelPeriodo(leads, ganados);
+  const cierresPorMes = months.map((m) => ventas.filter((l) => mesVenta(l) === m).length);
 
   const data: MixedData = {
     labels,

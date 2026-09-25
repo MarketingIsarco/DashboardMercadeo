@@ -101,8 +101,31 @@ export function isVenta(l: Lead): boolean {
   return l.stage >= STAGE_SEPARACION || l.status === STATUS_WON;
 }
 
-/** Aplica todos los filtros activos. Orden: del predicado más barato al más caro. */
-export function applyFilters(leads: Lead[], st: FilterState, digitalSources: number[]): Lead[] {
+/**
+ * Con qué fecha se ubica un trato en el tiempo.
+ *
+ * · `creacion` — `add_time`. Es el eje de todo el dashboard: leads, citas,
+ *   visitas, pérdidas, embudo.
+ * · `ganado` — `won_time`. Es el eje de **los ganados**, y sólo de ellos: un
+ *   trato ganado cuenta en el mes en que se ganó, no en el que entró al CRM.
+ */
+export type EjeFecha = 'creacion' | 'ganado';
+
+/**
+ * Aplica todos los filtros activos. Orden: del predicado más barato al más caro.
+ *
+ * Con `eje = 'ganado'` devuelve **sólo tratos ganados**, y el periodo (año,
+ * meses, rango de fechas) se evalúa contra la fecha de ganado. El resto de
+ * filtros se aplica igual, así que los dos conjuntos son comparables: mismo
+ * proyecto, canal, fuente, campaña, etiqueta, estado y etapa.
+ */
+export function applyFilters(
+  leads: Lead[],
+  st: FilterState,
+  digitalSources: number[],
+  eje: EjeFecha = 'creacion',
+): Lead[] {
+  const porGanado = eje === 'ganado';
   const digitalSet = new Set(digitalSources);
   const projectSet = st.projects.length ? new Set(st.projects) : null;
   const sourceSet = st.sources.length ? new Set(st.sources) : null;
@@ -116,11 +139,15 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
   const exMonthSet = st.exMonths.length ? new Set(st.exMonths) : null;
 
   return leads.filter((l) => {
+    if (porGanado && l.status !== STATUS_WON) return false;
     if (projectSet && !projectSet.has(l.project)) return false;
 
-    if (st.year !== null && l.date.slice(0, 4) !== st.year) return false;
-    if (monthSet && !monthSet.has(l.month)) return false;
-    if (exMonthSet && exMonthSet.has(l.month)) return false;
+    const date = porGanado ? l.wonDate : l.date;
+    const month = porGanado ? l.wonMonth : l.month;
+
+    if (st.year !== null && date.slice(0, 4) !== st.year) return false;
+    if (monthSet && !monthSet.has(month)) return false;
+    if (exMonthSet && exMonthSet.has(month)) return false;
 
     if (statusSet && !statusSet.has(l.status)) return false;
     if (exStatusSet && exStatusSet.has(l.status)) return false;
@@ -135,14 +162,60 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
     if (sourceSet && !sourceSet.has(l.source)) return false;
     if (campaignSet && !campaignSet.has(l.campaign)) return false;
 
-    if (st.dateFrom && l.date < st.dateFrom) return false;
-    if (st.dateTo && l.date > st.dateTo) return false;
+    if (st.dateFrom && date < st.dateFrom) return false;
+    if (st.dateTo && date > st.dateTo) return false;
 
     // Va de último porque es el único predicado que recorre un arreglo.
     if (labelSet && !l.labels.some((i) => labelSet.has(i))) return false;
 
     return true;
   });
+}
+
+/**
+ * Tratos ganados **en** el periodo filtrado, por fecha de ganado.
+ *
+ * Es la fuente de todo conteo de "ganados" del dashboard. `filtered` sigue
+ * siendo el universo por fecha de creación; contar `filtered.filter(isGanado)`
+ * da los ganados de los leads que *entraron* en el periodo, que es otra
+ * pregunta (la de las cohortes).
+ */
+export function ganadosDelPeriodo(leads: Lead[], st: FilterState, digitalSources: number[]): Lead[] {
+  return applyFilters(leads, st, digitalSources, 'ganado');
+}
+
+/**
+ * "Ventas" del periodo = separaciones que el CRM todavía no marcó como ganadas
+ * (por fecha de creación, que es la única que tienen) + los ganados del
+ * periodo por fecha de ganado.
+ *
+ * Una separación que ya se ganó sale del primer grupo y entra por el segundo:
+ * nunca cuenta dos veces.
+ */
+export function ventasDelPeriodo(filtered: Lead[], ganados: Lead[]): Lead[] {
+  return [...filtered.filter((l) => isVenta(l) && !isGanado(l)), ...ganados];
+}
+
+/** Mes en que un trato cuenta como venta: el de ganado si está ganado, el de creación si no. */
+export function mesVenta(l: Lead): string {
+  return l.status === STATUS_WON ? l.wonMonth : l.month;
+}
+
+/** Mes en que un ganado cuenta como tal. Igual que `mesVenta`, con nombre de lo que se lee. */
+export function mesGanado(l: Lead): string {
+  return l.wonMonth;
+}
+
+/**
+ * Eje temporal para una gráfica que mezcla leads (por creación) con ventas o
+ * ganados (por ganado): la unión de los meses de los dos, para que un ganado
+ * de un mes sin leads nuevos no desaparezca de la gráfica.
+ */
+export function timeAxisCon(leads: Lead[], ventas: Lead[]): { keys: string[] } {
+  const keys = [...new Set([...leads.map((l) => l.month), ...ventas.map(mesVenta)])]
+    .filter((k) => k && k.slice(0, 4) >= MIN_YEAR)
+    .sort();
+  return { keys };
 }
 
 /**
@@ -192,7 +265,12 @@ export interface Kpis {
   cierresProyectados: number;
 }
 
-export function computeKpis(f: Lead[]): Kpis {
+/**
+ * `ganados` es el conjunto por fecha de ganado (`ganadosDelPeriodo`). Si no se
+ * pasa, cae a los ganados de `f` — sólo sirve cuando `f` no está recortado en
+ * el tiempo.
+ */
+export function computeKpis(f: Lead[], ganados: Lead[] = f.filter(isGanado)): Kpis {
   const abiertos = f.filter(isAbierto);
   const enNegociacion = abiertos.filter((l) => l.stage === STAGE_NEGOCIACION).length;
   const enSeparacion = abiertos.filter((l) => l.stage === STAGE_SEPARACION).length;
@@ -204,7 +282,7 @@ export function computeKpis(f: Lead[]): Kpis {
     visitas: f.filter(isVisita).length,
     negociaciones: f.filter(isNegociacion).length,
     separaciones: f.filter(isSeparacion).length,
-    ganados: f.filter(isGanado).length,
+    ganados: ganados.length,
     perdidos: f.filter(isPerdido).length,
     abiertos: abiertos.length,
     enNegociacion,
@@ -300,7 +378,10 @@ export function countBy(leads: Lead[], pick: (l: Lead) => number, size: number):
 /** Datos + metadatos que todas las pestañas reciben. */
 export interface TabProps {
   data: DashboardData;
+  /** Leads del filtro por fecha de creación. */
   filtered: Lead[];
+  /** Ganados del filtro por fecha de ganado (`ganadosDelPeriodo`). */
+  ganados: Lead[];
   filters: FilterState;
   meta: Meta;
 }

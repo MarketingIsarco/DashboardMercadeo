@@ -378,6 +378,12 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const date = deal.add_time.slice(0, 10);
     const stage = STAGE_TO_IDX[stageName.get(deal.stage_id) ?? ''] ?? 0;
     const status = toStatus(deal.status);
+    // Misma convención que `date` (los 10 primeros caracteres, sin mover de
+    // zona), para que un trato creado y ganado el mismo día caiga en el mismo
+    // mes por las dos fechas. `close_time` es el respaldo por si la cuenta no
+    // expone `won_time`; en un ganado las dos coinciden.
+    const wonDate =
+      status === STATUS_WON ? dateOnly(deal.won_time) || dateOnly(deal.close_time) || date : '';
 
     const rawFuente = deal[FIELD.FUENTE];
     const sourceLabel =
@@ -420,6 +426,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
       id: deal.id,
       date,
       month: date.slice(0, 7),
+      wonDate,
+      wonMonth: wonDate.slice(0, 7),
       stage,
       status,
       lossGroup: isLost ? classifyLossGroup(reason) : '',
@@ -450,7 +458,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       sales.push({
         id: deal.id,
         name,
-        date,
+        date: wonDate || date,
         source: sourceLabel,
         isDigital: DIGITAL_SOURCES.includes(normalize(sourceLabel)),
         category: CONSTRUCTORA_IDX.includes(project) ? 'Constructora' : 'Inmobiliaria',

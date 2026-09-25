@@ -27,6 +27,19 @@ export interface Lead {
   date: string;
   /** `YYYY-MM`, precomputed because every chart groups by it. */
   month: string;
+  /**
+   * `YYYY-MM-DD` en que el trato quedó **ganado** (`won_time` de Pipedrive);
+   * `''` si no está ganado.
+   *
+   * Todo conteo de ganados se ubica en el tiempo por esta fecha, no por la de
+   * creación: un trato creado en octubre y ganado en marzo es un ganado de
+   * marzo. Sin ella, la carga masiva de marzo de 2026 (tratos de 2025) dejaba
+   * los ganados apilados en el mes en que se crearon en el CRM. Ver
+   * `applyFilters(…, 'ganado')` en `lib/selectors.ts`.
+   */
+  wonDate: string;
+  /** `YYYY-MM` de `wonDate`; `''` si no está ganado. */
+  wonMonth: string;
   /** Index into `STAGES`. */
   stage: number;
   status: Status;
@@ -119,6 +132,10 @@ export interface SaleDeal {
   /** Coincide con `Lead.id`, para poder filtrarlas con los mismos filtros. */
   id: number;
   name: string;
+  /**
+   * Fecha de la venta: la de ganado (`won_time`) si el trato está ganado, la
+   * de creación si es una separación que el CRM todavía no marcó.
+   */
   date: string;
   source: string;
   isDigital: boolean;

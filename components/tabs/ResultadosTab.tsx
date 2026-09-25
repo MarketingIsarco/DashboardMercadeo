@@ -23,10 +23,11 @@ import {
   deltaEtapa,
   isCita,
   isPerdido,
-  isVenta,
   isVisita,
   keyOf,
-  timeAxis,
+  mesVenta,
+  timeAxisCon,
+  ventasDelPeriodo,
 } from '@/lib/selectors';
 import type { TabProps } from '@/lib/selectors';
 import type { Lead, SaleDeal } from '@/lib/types';
@@ -37,13 +38,15 @@ function sourceColor(name: string): string {
   return SOURCE_COLORS[name] ?? SOURCE_FALLBACK;
 }
 
-export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
+export function ResultadosTab({ data, filtered, ganados, filters, meta }: TabProps) {
   const [advisorFilter, setAdvisorFilter] = useState<number | null>(null);
 
-  const k = useMemo(() => computeKpis(filtered), [filtered]);
+  const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
   const goal = useMemo(() => goalFor(filters), [filters]);
 
-  const ventas = useMemo(() => filtered.filter(isVenta), [filtered]);
+  // Los ganados entran por fecha de ganado, las separaciones abiertas por la
+  // de creación: ver `ventasDelPeriodo`.
+  const ventas = useMemo(() => ventasDelPeriodo(filtered, ganados), [filtered, ganados]);
   const perdidos = useMemo(() => filtered.filter(isPerdido), [filtered]);
 
   const tasaCierre = pctNum(ventas.length, filtered.length);
@@ -171,7 +174,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Ventas, visitas y citas</h3>
-            <TrendChart leads={filtered} goalCierres={goal?.cierres ?? null} />
+            <TrendChart leads={filtered} ventas={ventas} goalCierres={goal?.cierres ?? null} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Mix de fuentes en ventas</h3>
@@ -180,11 +183,11 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         </div>
         <div className="mt-5">
           <h3 className="mb-2 text-xs font-semibold text-dim">Ventas vs. pérdidas por periodo</h3>
-          <WinLossTrend leads={filtered} goalCierres={goal?.cierres ?? null} />
+          <WinLossTrend leads={filtered} ventas={ventas} goalCierres={goal?.cierres ?? null} />
         </div>
       </Section>
 
-      <SalesTable sales={data.sales} filtered={filtered} />
+      <SalesTable sales={data.sales} ventas={ventas} />
     </>
   );
 }
@@ -440,16 +443,20 @@ function SalesByProject({ ventas, projects }: { ventas: Lead[]; projects: string
 
 function TrendChart({
   leads,
+  ventas,
   goalCierres,
 }: {
   leads: Lead[];
+  ventas: Lead[];
   goalCierres: number | null;
 }) {
-  const ta = timeAxis(leads);
+  const ta = timeAxisCon(leads, ventas);
   const buckets = ta.keys.map((key) => {
     const rows = leads.filter((l) => keyOf(l) === key);
     return {
-      v: rows.filter(isVenta).length,
+      // Las ventas se ubican por su mes de venta (ganado → `won_time`); citas
+      // y visitas, por el de creación del lead.
+      v: ventas.filter((l) => mesVenta(l) === key).length,
       vis: rows.filter(isVisita).length,
       c: rows.filter(isCita).length,
     };
@@ -528,15 +535,17 @@ function SourceMix({ ventas, sources }: { ventas: Lead[]; sources: string[] }) {
 
 function WinLossTrend({
   leads,
+  ventas,
   goalCierres,
 }: {
   leads: Lead[];
+  ventas: Lead[];
   goalCierres: number | null;
 }) {
-  const ta = timeAxis(leads);
+  const ta = timeAxisCon(leads, ventas);
   const buckets = ta.keys.map((key) => {
     const rows = leads.filter((l) => keyOf(l) === key);
-    return { v: rows.filter(isVenta).length, p: rows.filter(isPerdido).length };
+    return { v: ventas.filter((l) => mesVenta(l) === key).length, p: rows.filter(isPerdido).length };
   });
 
   return (
@@ -590,10 +599,10 @@ function WinLossTrend({
   );
 }
 
-function SalesTable({ sales, filtered }: { sales: SaleDeal[]; filtered: Lead[] }) {
-  // Las ventas se cruzan contra los leads filtrados por id, así la tabla
-  // respeta la barra de filtros (el dashboard original la ignoraba).
-  const ids = useMemo(() => new Set(filtered.filter(isVenta).map((l) => l.id)), [filtered]);
+function SalesTable({ sales, ventas }: { sales: SaleDeal[]; ventas: Lead[] }) {
+  // Las ventas se cruzan por id contra las del periodo, así la tabla respeta
+  // la barra de filtros — y los ganados, su fecha de ganado.
+  const ids = useMemo(() => new Set(ventas.map((l) => l.id)), [ventas]);
   const rows = useMemo(
     () => sales.filter((s) => ids.has(s.id)).sort((a, b) => b.date.localeCompare(a.date)),
     [sales, ids],

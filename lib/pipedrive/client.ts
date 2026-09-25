@@ -21,6 +21,8 @@ export interface PipedriveDeal {
   title: string;
   add_time: string;
   close_time: string | null;
+  /** `YYYY-MM-DD HH:MM:SS` en que el trato se marcó ganado; `null` si no lo está. */
+  won_time?: string | null;
   /** `YYYY-MM-DD HH:MM:SS` — último movimiento del deal. */
   update_time: string | null;
   /** `YYYY-MM-DD` de la próxima actividad agendada, o `null`. */

@@ -122,6 +122,31 @@ export function leadsPorMes(
   return out;
 }
 
+/**
+ * Ganados de un proyecto y un origen, agrupados por **mes de ganado**.
+ *
+ * Es la excepción a la regla de cohortes del capítulo: los ganados se cuentan
+ * en el mes en que se ganaron (`won_time`), igual que en el resto del
+ * dashboard. Un trato creado en octubre y ganado en marzo es un ganado de
+ * marzo, no de la cohorte de octubre.
+ */
+export function ganadosPorMes(
+  leads: Lead[],
+  projIdx: number,
+  scope: Scope,
+  digitalSources: number[],
+): Map<string, number> {
+  const digitales = new Set(digitalSources);
+  const out = new Map<string, number>();
+  for (const l of leads) {
+    if (l.status !== STATUS_WON || !l.wonMonth) continue;
+    if (l.project !== projIdx) continue;
+    if (!enScope(l, scope, digitales)) continue;
+    out.set(l.wonMonth, (out.get(l.wonMonth) ?? 0) + 1);
+  }
+  return out;
+}
+
 /** Meses `YYYY-MM` con al menos un lead, ascendente. */
 export function mesesConLeads(porMes: Map<string, Lead[]>): string[] {
   return [...porMes.keys()].sort();
@@ -142,8 +167,17 @@ export function ventanaTrimestre(cierre: string): string[] {
   });
 }
 
-export function resumirCohorte(month: string, ls: Lead[], inversion: number | null): Cohorte {
-  if (ls.length === 0) return { ...CERO_COHORTE(month), inversion };
+/**
+ * `ganados` es el conteo del mes por fecha de ganado (`ganadosPorMes`). Si no
+ * se pasa, cae a los ganados de la cohorte.
+ */
+export function resumirCohorte(
+  month: string,
+  ls: Lead[],
+  inversion: number | null,
+  ganados?: number,
+): Cohorte {
+  if (ls.length === 0) return { ...CERO_COHORTE(month), inversion, ganados: ganados ?? 0 };
 
   return {
     month,
@@ -154,7 +188,7 @@ export function resumirCohorte(month: string, ls: Lead[], inversion: number | nu
     sep: ls.filter((l) => l.stage >= STAGE_SEPARACION).length,
     abiertos: ls.filter((l) => l.status === STATUS_OPEN).length,
     perdidos: ls.filter((l) => l.status === STATUS_LOST).length,
-    ganados: ls.filter((l) => l.status === STATUS_WON).length,
+    ganados: ganados ?? ls.filter((l) => l.status === STATUS_WON).length,
     estancados: ls.filter((l) => l.stage < STAGE_CITA).length,
     inversion,
   };
@@ -172,12 +206,13 @@ export function cohortesDeVentana(
   ventana: string[],
   projIdx: number,
   scope: Scope,
+  ganados?: Map<string, number>,
 ): Cohorte[] {
   const bolsa = scope === 'dig' ? bolsaDelProyecto(projIdx) : null;
 
   return ventana.map((m) => {
     const inv = bolsa ? totalesMes([bolsa], m).digital : null;
-    return resumirCohorte(m, porMes.get(m) ?? [], inv || null);
+    return resumirCohorte(m, porMes.get(m) ?? [], inv || null, ganados ? (ganados.get(m) ?? 0) : undefined);
   });
 }
 
@@ -360,6 +395,10 @@ export function filasOutbound(
   const excluidas = new Set([...OUTBOUND_EXCLUDED_LABELS, SIN_ETIQUETA].map(normalize));
   const meses = new Set(ventana);
   const delPeriodo = leads.filter((l) => l.project === projIdx && meses.has(l.month));
+  // Los ganados de la ventana, por mes de ganado (ver `ganadosPorMes`).
+  const ganadosPeriodo = leads.filter(
+    (l) => l.status === STATUS_WON && l.project === projIdx && meses.has(l.wonMonth),
+  );
 
   return labels
     .map((etiqueta, i) => ({ etiqueta, i }))
@@ -372,7 +411,7 @@ export function filasOutbound(
         meses: ventana.filter((m) => ls.some((l) => l.month === m)),
         citas: ls.filter((l) => l.stage >= STAGE_CITA).length,
         visitas: ls.filter((l) => l.stage >= STAGE_VISITA).length,
-        ganados: ls.filter((l) => l.status === STATUS_WON).length,
+        ganados: ganadosPeriodo.filter((l) => l.labels.includes(i)).length,
         motivoTop: motivoDominante(ls),
       };
     })

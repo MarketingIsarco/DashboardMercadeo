@@ -4,7 +4,7 @@ import {
   PERFIL_UMBRALES,
 } from '@/lib/config/negocio';
 import type { PerfilCampo, PerfilGrupo, PerfilViz } from '@/lib/config/negocio';
-import { isCita, isGanado, isVisita } from '@/lib/selectors';
+import { isCita, isVisita } from '@/lib/selectors';
 import type { Lead, Meta } from '@/lib/types';
 
 /**
@@ -351,23 +351,24 @@ export interface Combinado {
  * combinaciones de 2 y 3 tratos, que es justo lo que no se debe mirar primero;
  * el componente deja cambiarlo, con el corte de muestra mínima a la mano.
  */
-export function combinaciones(leads: Lead[], meta: Meta, campos: number[]): Combinado {
+export function combinaciones(leads: Lead[], meta: Meta, campos: number[], ganados: Lead[]): Combinado {
   const acc = new Map<string, Combinacion>();
   let base = 0;
 
-  for (const l of leads) {
+  /** Valores del trato en las variables pedidas; `null` si le falta alguna. */
+  const valoresDe = (l: Lead): string[] | null => {
     const valores: string[] = [];
-    let completo = true;
-
     for (const c of campos) {
       const v = categoria(l, c, meta);
-      if (v === null) {
-        completo = false;
-        break;
-      }
+      if (v === null) return null;
       valores.push(v);
     }
-    if (!completo) continue;
+    return valores;
+  };
+
+  for (const l of leads) {
+    const valores = valoresDe(l);
+    if (!valores) continue;
 
     base += 1;
     // El separador no puede aparecer en un valor del CRM: "Invertir, Habitar"
@@ -381,8 +382,18 @@ export function combinaciones(leads: Lead[], meta: Meta, campos: number[]): Comb
     r.n += 1;
     if (isCita(l)) r.citas += 1;
     if (isVisita(l)) r.visitas += 1;
-    if (isGanado(l)) r.cierres += 1;
     acc.set(clave, r);
+  }
+
+  // Los cierres salen de los ganados del periodo por **fecha de ganado**, no de
+  // los leads creados en él. Sólo suman a un segmento que ya tiene leads en el
+  // filtro: una fila con cierres y cero leads no es un segmento que se pueda
+  // leer, y su tasa sería infinita.
+  for (const g of ganados) {
+    const valores = valoresDe(g);
+    if (!valores) continue;
+    const r = acc.get(valores.join('\u0000'));
+    if (r) r.cierres += 1;
   }
 
   const filas = [...acc.values()]

@@ -57,15 +57,16 @@ import {
   goalFor,
   metaEtapa,
   isCita,
-  isGanado,
   isPerdido,
   isVisita,
   keyOf,
+  mesGanado,
   timeAxis,
+  timeAxisCon,
 } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { Lead, LossGroup, Meta } from '@/lib/types';
-import { CONTENT_REEL, CONTENT_STATIC, STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
+import { CONTENT_REEL, CONTENT_STATIC, STATUS_LOST, STATUS_OPEN } from '@/lib/types';
 
 // ── Constantes locales ───────────────────────────────────────────────
 // Un color por etapa del embudo (7). El HTML sólo definía 6 y dejaba la última
@@ -81,7 +82,7 @@ function sourceIdxSet(sources: string[], names: string[]): Set<number> {
   return new Set(sourceIndices(sources, names));
 }
 
-export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
+export function MercadeoTab({ data, filtered, ganados, filters, meta }: TabProps) {
   const goal = useMemo(() => goalFor(filters), [filters]);
 
   return (
@@ -91,13 +92,13 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
 
       {/* 02 · Pipeline */}
       <Section title="02 · Pipeline" sub="Estado del embudo, evolución temporal y comparativo mensual">
-        <PipelineVivo leads={filtered} />
+        <PipelineVivo leads={filtered} ganados={ganados} />
         <div className="mt-6">
           <Timeline leads={filtered} goal={goal} />
         </div>
         <div className="mt-6">
           <h3 className="mb-2 text-xs font-semibold text-dim">Comparativo mensual</h3>
-          <Comparativo leads={filtered} />
+          <Comparativo leads={filtered} ganados={ganados} />
         </div>
       </Section>
 
@@ -113,7 +114,7 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         </div>
         <div className="mt-6">
           <h3 className="mb-2 text-xs font-semibold text-dim">Campañas: Reel vs Estática</h3>
-          <CampType leads={filtered} />
+          <CampType leads={filtered} ganados={ganados} />
         </div>
         <div className="mt-6 grid gap-5 lg:grid-cols-2">
           <div>
@@ -144,7 +145,7 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         title="05 · Inversión en Mercadeo"
         sub="Presupuesto P&G clasificado en Digital / No-Digital · según los filtros activos"
       >
-        <Inversion filtered={filtered} filters={filters} meta={meta} />
+        <Inversion filtered={filtered} ganados={ganados} filters={filters} meta={meta} />
       </Section>
 
       {/* 06 · Campañas Outbound */}
@@ -152,7 +153,7 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         title="06 · Campañas Outbound"
         sub="Efectividad de las campañas de reactivación y recuperación, por etiqueta del trato"
       >
-        <Outbound leads={filtered} labels={meta.labels} />
+        <Outbound leads={filtered} ganados={ganados} labels={meta.labels} />
       </Section>
 
       {/* 07 · Buyer Persona */}
@@ -160,7 +161,7 @@ export function MercadeoTab({ data, filtered, filters, meta }: TabProps) {
         title="07 · Buyer Persona"
         sub="Quién es el cliente que estamos registrando en el embudo · demográfico, psicográfico y económico"
       >
-        <BuyerPersona filtered={filtered} meta={meta} />
+        <BuyerPersona filtered={filtered} ganados={ganados} meta={meta} />
       </Section>
     </>
   );
@@ -286,10 +287,11 @@ function KpiSection({
 // ─────────────────────────────────────────────────────────────────────
 // 02 · Pipeline
 // ─────────────────────────────────────────────────────────────────────
-function PipelineVivo({ leads }: { leads: Lead[] }) {
+function PipelineVivo({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
   const abierto = STAGES.map((_, i) => leads.filter((l) => l.stage === i && l.status === STATUS_OPEN).length);
   const perdido = STAGES.map((_, i) => leads.filter((l) => l.stage === i && l.status === STATUS_LOST).length);
-  const ganado = STAGES.map((_, i) => leads.filter((l) => l.stage === i && l.status === STATUS_WON).length);
+  // Los ganados vienen del conjunto por fecha de ganado, no de `leads`.
+  const ganado = STAGES.map((_, i) => ganados.filter((l) => l.stage === i).length);
   const totals = STAGES.map((_, i) => abierto[i] + perdido[i] + ganado[i]);
 
   const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -563,7 +565,7 @@ interface CampanaOutbound {
 }
 
 /** Métricas de un grupo de leads, para una campaña o para el total. */
-function resumirOutbound(nombre: string, ls: Lead[]): CampanaOutbound {
+function resumirOutbound(nombre: string, ls: Lead[], gs: Lead[]): CampanaOutbound {
   return {
     nombre,
     leads: ls.length,
@@ -573,7 +575,8 @@ function resumirOutbound(nombre: string, ls: Lead[]): CampanaOutbound {
     separaciones: ls.filter((l) => l.stage >= STAGE_SEPARACION).length,
     abiertos: ls.filter((l) => l.status === STATUS_OPEN).length,
     perdidos: ls.filter(isPerdido).length,
-    ganados: ls.filter(isGanado).length,
+    // `gs` = ganados del periodo por fecha de ganado, ya recortados al grupo.
+    ganados: gs.length,
   };
 }
 
@@ -588,7 +591,7 @@ function resumirOutbound(nombre: string, ls: Lead[]): CampanaOutbound {
  * varias etiquetas por trato, así que un lead reactivado dos veces aparece en
  * las dos campañas y sumar las columnas lo contaría doble.
  */
-function Outbound({ leads, labels }: { leads: Lead[]; labels: string[] }) {
+function Outbound({ leads, ganados, labels }: { leads: Lead[]; ganados: Lead[]; labels: string[] }) {
   const { campanas, total } = useMemo(() => {
     const excluidas = new Set([...OUTBOUND_EXCLUDED_LABELS, SIN_ETIQUETA].map(normalize));
     const idxOutbound = labels
@@ -596,15 +599,24 @@ function Outbound({ leads, labels }: { leads: Lead[]; labels: string[] }) {
       .filter(({ nombre }) => !excluidas.has(normalize(nombre)));
 
     const cs = idxOutbound
-      .map(({ nombre, i }) => resumirOutbound(nombre, leads.filter((l) => l.labels.includes(i))))
+      .map(({ nombre, i }) =>
+        resumirOutbound(
+          nombre,
+          leads.filter((l) => l.labels.includes(i)),
+          ganados.filter((l) => l.labels.includes(i)),
+        ),
+      )
       .filter((c) => c.leads > 0)
       .sort((a, b) => b.leads - a.leads);
 
     const idsOutbound = new Set(idxOutbound.map(({ i }) => i));
-    const unicos = leads.filter((l) => l.labels.some((i) => idsOutbound.has(i)));
+    const enOutbound = (l: Lead) => l.labels.some((i) => idsOutbound.has(i));
 
-    return { campanas: cs, total: resumirOutbound('TOTAL', unicos) };
-  }, [leads, labels]);
+    return {
+      campanas: cs,
+      total: resumirOutbound('TOTAL', leads.filter(enOutbound), ganados.filter(enOutbound)),
+    };
+  }, [leads, ganados, labels]);
 
   if (campanas.length === 0) {
     return (
@@ -688,15 +700,16 @@ function Outbound({ leads, labels }: { leads: Lead[]; labels: string[] }) {
   );
 }
 
-function Comparativo({ leads }: { leads: Lead[] }) {
-  const ta = timeAxis(leads);
+function Comparativo({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
+  const ta = timeAxisCon(leads, ganados);
   const buckets = ta.keys.map((kk) => {
     const rows = leads.filter((l) => keyOf(l) === kk);
     return {
       leads: rows.length,
       citas: rows.filter(isCita).length,
       vis: rows.filter(isVisita).length,
-      gan: rows.filter(isGanado).length,
+      // Por mes de ganado: un cierre de marzo de un lead de octubre es de marzo.
+      gan: ganados.filter((l) => mesGanado(l) === kk).length,
     };
   });
 
@@ -818,21 +831,24 @@ function StageSrc({ leads, sources }: { leads: Lead[]; sources: string[] }) {
   );
 }
 
-function CampType({ leads }: { leads: Lead[] }) {
+function CampType({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
   const reel = leads.filter((l) => l.content === CONTENT_REEL);
   const esta = leads.filter((l) => l.content === CONTENT_STATIC);
   const metrics = ['Leads', 'Citas+', 'Visitas', 'Cierres'];
-  const series = (arr: Lead[]) => [arr.length, arr.filter(isCita).length, arr.filter(isVisita).length, arr.filter(isGanado).length];
+  // Cierres = ganados del periodo por fecha de ganado, del mismo tipo de pieza.
+  const gReel = ganados.filter((l) => l.content === CONTENT_REEL).length;
+  const gEsta = ganados.filter((l) => l.content === CONTENT_STATIC).length;
+  const series = (arr: Lead[], g: number) => [arr.length, arr.filter(isCita).length, arr.filter(isVisita).length, g];
 
   const tableRows = [
-    { tipo: 'Reel', arr: reel },
-    { tipo: 'Estática', arr: esta },
-  ].map(({ tipo, arr }) => ({
+    { tipo: 'Reel', arr: reel, g: gReel },
+    { tipo: 'Estática', arr: esta, g: gEsta },
+  ].map(({ tipo, arr, g }) => ({
     tipo,
     leads: arr.length,
     citas: arr.filter(isCita).length,
     vis: arr.filter(isVisita).length,
-    cierres: arr.filter(isGanado).length,
+    cierres: g,
     pCita: pct(arr.filter(isCita).length, arr.length),
     pVis: pct(arr.filter(isVisita).length, arr.length),
   }));
@@ -844,8 +860,8 @@ function CampType({ leads }: { leads: Lead[] }) {
           data={{
             labels: metrics,
             datasets: [
-              { label: 'Reel', data: series(reel), backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
-              { label: 'Estática', data: series(esta), backgroundColor: '#22d3ee44', borderColor: '#22d3ee', borderWidth: 2 },
+              { label: 'Reel', data: series(reel, gReel), backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
+              { label: 'Estática', data: series(esta, gEsta), backgroundColor: '#22d3ee44', borderColor: '#22d3ee', borderWidth: 2 },
             ],
           }}
           options={{
@@ -1149,7 +1165,17 @@ function LossByCampaign({ leads, campaigns }: { leads: Lead[]; campaigns: string
 //   · los costos por visita y por cierre, que sí van contra el total, porque
 //     una visita a sala la produce el conjunto de la mezcla
 // ─────────────────────────────────────────────────────────────────────
-function Inversion({ filtered, filters, meta }: { filtered: Lead[]; filters: FilterState; meta: Meta }) {
+function Inversion({
+  filtered,
+  ganados,
+  filters,
+  meta,
+}: {
+  filtered: Lead[];
+  ganados: Lead[];
+  filters: FilterState;
+  meta: Meta;
+}) {
   const bolsas = useMemo(() => bolsasActivas(filters), [filters]);
   const months = useMemo(() => mesesActivos(filters), [filters]);
   const metaIdx = useMemo(() => sourceIdxSet(meta.sources, META_ADS_SOURCES), [meta.sources]);
@@ -1170,7 +1196,8 @@ function Inversion({ filtered, filters, meta }: { filtered: Lead[]; filters: Fil
     const leadsDig = base.filter((l) => paidIdx.has(l.source)).length;
     const citas = base.filter(isCita).length;
     const visitas = base.filter(isVisita).length;
-    const cierres = base.filter(isGanado).length;
+    // Los cierres, de los mismos proyectos y meses, pero por mes de ganado.
+    const cierres = ganados.filter((l) => proyectos.has(l.project) && mesesSet.has(l.wonMonth)).length;
 
     const ratio = (num: number, den: number) => (num && den ? Math.round(num / den) : null);
 
@@ -1184,7 +1211,7 @@ function Inversion({ filtered, filters, meta }: { filtered: Lead[]; filters: Fil
       costoVis: ratio(inv.total, visitas),
       costoCierre: ratio(inv.total, cierres),
     };
-  }, [bolsas, months, filtered, metaIdx, paidIdx]);
+  }, [bolsas, months, filtered, ganados, metaIdx, paidIdx]);
 
   const money = (v: number | null) => (v == null ? '–' : fmtCOP(v));
   const millions = (v: number) => `$${(v / 1e6).toFixed(2)}M`;
@@ -1476,7 +1503,7 @@ function RubrosTable({ bolsas, months }: { bolsas: Bolsa[]; months: string[] }) 
 //      perfila al lead que le interesa, así que el perfil describe a quien el
 //      asesor decidió perfilar, no a quien consulta por el proyecto.
 // ─────────────────────────────────────────────────────────────────────
-function BuyerPersona({ filtered, meta }: { filtered: Lead[]; meta: Meta }) {
+function BuyerPersona({ filtered, ganados, meta }: { filtered: Lead[]; ganados: Lead[]; meta: Meta }) {
   const cob = useMemo(() => cobertura(filtered, meta), [filtered, meta]);
   const suf = useMemo(() => suficiencia(cob.nucleo), [cob.nucleo]);
   const dists = useMemo(
@@ -1567,7 +1594,7 @@ function BuyerPersona({ filtered, meta }: { filtered: Lead[]; meta: Meta }) {
       </div>
 
       <div className="mt-8">
-        <ExploradorPerfil leads={filtered} meta={meta} />
+        <ExploradorPerfil leads={filtered} ganados={ganados} meta={meta} />
       </div>
     </div>
   );
@@ -1808,12 +1835,15 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
  * · **Orden.** Por volumen para ver dónde está el grueso; por tasa de cierre
  *   para buscar el segmento rentable — sólo tiene sentido con el mínimo puesto.
  */
-function ExploradorPerfil({ leads, meta }: { leads: Lead[]; meta: Meta }) {
+function ExploradorPerfil({ leads, ganados, meta }: { leads: Lead[]; ganados: Lead[]; meta: Meta }) {
   const [sel, setSel] = useState<number[]>([PERFIL_GENERO, PERFIL_EDAD]);
   const [minN, setMinN] = useState(5);
   const [orden, setOrden] = useState<'volumen' | 'cierre'>('volumen');
 
-  const { base, filas } = useMemo(() => combinaciones(leads, meta, sel), [leads, meta, sel]);
+  const { base, filas } = useMemo(
+    () => combinaciones(leads, meta, sel, ganados),
+    [leads, meta, sel, ganados],
+  );
 
   const visibles = useMemo(() => {
     const f = filas.filter((r) => r.n >= minN);
