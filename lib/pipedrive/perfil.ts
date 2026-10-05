@@ -32,7 +32,7 @@ interface CampoResuelto {
 }
 
 /** Localiza cada campo de `PERFIL_CAMPOS` en la definición de campos del CRM. */
-function resolver(dealFields: PipedriveDealField[]): CampoResuelto[] {
+function resolver(dealFields: PipedriveDealField[], campos: PerfilCampo[]): CampoResuelto[] {
   // Un mismo nombre normalizado podría venir dos veces si alguien duplicó el
   // campo en el CRM; nos quedamos con el primero, que es el que Pipedrive
   // muestra primero en el formulario.
@@ -42,7 +42,7 @@ function resolver(dealFields: PipedriveDealField[]): CampoResuelto[] {
     if (n && !porNombre.has(n)) porNombre.set(n, f);
   }
 
-  return PERFIL_CAMPOS.map((campo) => {
+  return campos.map((campo) => {
     const def = campo.alias.map((a) => porNombre.get(normalize(a))).find((f) => f !== undefined);
 
     const opciones = new Map<string, string>(
@@ -136,8 +136,15 @@ export interface PerfilExtractor {
   meta(): PerfilCampoMeta[];
 }
 
-export function buildPerfilExtractor(dealFields: PipedriveDealField[]): PerfilExtractor {
-  const resueltos = resolver(dealFields);
+/**
+ * `campos` es la lista a resolver: por defecto los del buyer persona. La ficha
+ * inmobiliaria (`FICHA_INM_CAMPOS`) usa el mismo mecanismo con su propia lista.
+ */
+export function buildPerfilExtractor(
+  dealFields: PipedriveDealField[],
+  campos: PerfilCampo[] = PERFIL_CAMPOS,
+): PerfilExtractor {
+  const resueltos = resolver(dealFields, campos);
 
   return {
     extract(deal) {

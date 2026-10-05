@@ -62,7 +62,7 @@ lib/config/negocio.ts  TODO lo que no vive en Pipedrive (inversión, metas, rott
 lib/inversion.ts       Derivaciones sobre el presupuesto: bolsas y meses activos, Digital/No-Digital
 lib/selectors.ts       Filtros y métricas derivadas
 lib/gestion.ts         Estado del pipeline abierto: actividad agendada y rotting
-components/tabs/*      Las 5 pestañas
+components/tabs/*      Las pestañas
 ```
 
 Traer los ~6.500 deals son ~13 peticiones paginadas (≈6 s). La caché las guarda
@@ -131,7 +131,8 @@ motivos de pérdida y la paleta.
 |---|---|
 | Resultados | KPIs, embudo, análisis de ventas, tendencias, detalle de ventas |
 | Mercadeo | Pipeline, análisis por fuente, motivos de pérdida, inversión en mercadeo (Digital vs No-Digital + desglose por rubro) |
-| Comercial | Gestión en tiempo real, gestión por asesor, antigüedad de leads, negocios perdidos |
+| Comercial COIS | Gestión en tiempo real, gestión por asesor, antigüedad de leads, negocios perdidos |
+| Comercial INM | Indicadores de la inmobiliaria y panel del asesor: filtro de embudo y asesor, etapa, inmueble, tipo, acabados, presupuesto, área y fuente por cliente |
 | Comparativo | Mes A vs. mes B, con controles propios |
 | Gerencia | Pulso del negocio, alertas de gestión por asesor, velocidad del funnel, primer contacto, mapa de calor de reuniones |
 

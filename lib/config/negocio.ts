@@ -838,3 +838,86 @@ export const MONTH_SHORT = [
 
 /** Los charts ignoran datos anteriores a este año. */
 export const MIN_YEAR = '2025';
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * COMERCIAL INM — ficha del cliente de la inmobiliaria
+ *
+ * Los cinco campos de Pipedrive que describen lo que busca un cliente de
+ * Oficinas, Locales, Bodegas, Coworking u Otros Inmuebles. Alimentan el
+ * capítulo 02 de la pestaña **Comercial INM**, que es el panel del asesor.
+ *
+ * Igual que el buyer persona, se resuelven **por nombre** (ver `perfil.ts`):
+ * si alguien recrea un campo en el CRM y cambia el hash, la columna no se queda
+ * en blanco en silencio, se marca ausente. La fuente no va aquí porque ya viaja
+ * en `Lead.source`.
+ *
+ * El orden fija los índices de `Lead.ficha`: agregar siempre al final.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const FICHA_INM_CAMPOS: PerfilCampo[] = [
+  { label: 'Inmueble', alias: ['Inmueble'], viz: 'ranking', grupo: 'econ', topN: 12 },
+  {
+    label: 'Tipo de inmueble',
+    alias: ['Tipo de inmueble', 'Tipo inmueble'],
+    viz: 'torta',
+    grupo: 'econ',
+    orden: ['Oficinas', 'Locales', 'Bodegas', 'Coworking', 'Otros Inmuebles', 'Apartamentos en venta'],
+  },
+  {
+    // En el CRM el campo se llama "Entrega" y trae el estado de entrega
+    // (Obra Gris, Obra Blanca, Adecuado, Amoblado). El Sí/No de acabados se
+    // deriva de aquí con `ACABADOS_SI`, para no pedirle al equipo un campo nuevo.
+    label: 'Entrega',
+    alias: ['Entrega con Acabados (Si/No)', 'Entrega con acabados', 'Entrega'],
+    viz: 'torta',
+    grupo: 'econ',
+    orden: ['Obra Gris', 'Obra Blanca', 'Adecuado', 'Amoblado'],
+  },
+  {
+    label: 'Presupuesto',
+    alias: ['Presupuesto'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    // Conviven cánones de arriendo y precios de venta: los cortes cubren los dos.
+    buckets: [
+      { label: 'Hasta $10M', min: null, max: 10_000_000 },
+      { label: '$10M a $50M', min: 10_000_000, max: 50_000_000 },
+      { label: '$50M a $500M', min: 50_000_000, max: 500_000_000 },
+      { label: '$500M a $2.000M', min: 500_000_000, max: 2_000_000_000 },
+      { label: 'Más de $2.000M', min: 2_000_000_000, max: null },
+    ],
+  },
+  {
+    label: 'Área requerida',
+    alias: ['Área Requerida', 'Area Requerida', 'Área requerida'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    buckets: [
+      { label: 'Hasta 50 m²', min: null, max: 51 },
+      { label: '51 a 100 m²', min: 51, max: 101 },
+      { label: '101 a 300 m²', min: 101, max: 301 },
+      { label: '301 a 1.000 m²', min: 301, max: 1_001 },
+      { label: 'Más de 1.000 m²', min: 1_001, max: null },
+    ],
+  },
+];
+
+export const FICHA_INMUEBLE = 0;
+export const FICHA_TIPO = 1;
+export const FICHA_ENTREGA = 2;
+export const FICHA_PRESUPUESTO = 3;
+export const FICHA_AREA = 4;
+
+/**
+ * Valores del campo "Entrega" que cuentan como **entrega con acabados**.
+ *
+ * ⚠️ Es una regla comercial, no un dato del CRM: se edita aquí. Obra gris y
+ * obra blanca se leen como "sin acabados"; adecuado y amoblado, como "con
+ * acabados". Cualquier valor nuevo que aparezca en el CRM y no esté en ninguna
+ * de las dos listas se muestra como "Sin dato" hasta que se clasifique.
+ */
+export const ACABADOS_SI = ['Adecuado', 'Amoblado'];
+export const ACABADOS_NO = ['Obra Gris', 'Obra Blanca'];

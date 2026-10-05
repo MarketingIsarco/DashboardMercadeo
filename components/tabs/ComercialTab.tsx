@@ -92,6 +92,56 @@ interface PresentAdvisor {
   color: string;
 }
 
+/**
+ * Capítulo 01 de las pestañas comerciales. Lo comparten **Comercial COIS** y
+ * **Comercial INM** para que los indicadores se calculen igual en las dos: la
+ * única diferencia es el universo de leads que recibe.
+ */
+export function KpisGenerales({
+  filtered,
+  ganados,
+  filters,
+}: Pick<TabProps, 'filtered' | 'ganados' | 'filters'>) {
+  const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
+  return (
+    <Section
+      title="01 · KPIs Generales"
+      sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
+    >
+      <KpiGrid cols={8}>
+        <Kpi size="xs" label="Total Leads" value={k.total.toLocaleString('es-CO')} meta="Activos, perdidos y ganados" />
+        <Kpi size="xs" label="Citas agendadas" value={k.citas} meta={`${pct(k.citas, k.total)}% del total`} />
+        <Kpi size="xs" label="Visitas realizadas" value={k.visitas} meta={`${pct(k.visitas, k.total)}% del total`} />
+        {/* Etapa alcanzada, igual que citas y visitas. */}
+        <Kpi
+          size="xs"
+          label="Negociaciones"
+          value={k.negociaciones}
+          meta={`${pct(k.negociaciones, k.total)}% del total`}
+          sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+        />
+        {/* Venta = trato ganado, por fecha de ganado. Las separaciones no suman. */}
+        <Kpi
+          size="xs"
+          label="Ventas"
+          value={k.ganados}
+          meta={`${pct(k.ganados, k.total)}% del total`}
+          sub={`${pct(k.ganados, k.visitas)}% de las visitas`}
+        />
+        <Kpi size="xs" label="Tasa Lead→Cita" value={`${pct(k.citas, k.total)}%`} meta={`${k.citas} citas de ${k.total} leads`} />
+        <Kpi
+          size="xs"
+          label="Tasa Visita→Sep"
+          value={`${pct(k.separaciones + k.ganados, k.visitas)}%`}
+          meta={`${k.separaciones + k.ganados} cierres de ${k.visitas} visitas`}
+        />
+        <Kpi size="xs" label="Tasa de pérdida" value={`${pct(k.perdidos, k.total)}%`} meta={`${k.perdidos} de ${k.total}`} />
+      </KpiGrid>
+      <TasasMercado digital={filters.digital} />
+    </Section>
+  );
+}
+
 // ── Componente principal ─────────────────────────────────────────────
 
 export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
@@ -118,41 +168,7 @@ export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
   return (
     <>
       {/* 01 · KPIs Generales */}
-      <Section
-        title="01 · KPIs Generales"
-        sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
-      >
-        <KpiGrid cols={8}>
-          <Kpi size="xs" label="Total Leads" value={k.total.toLocaleString('es-CO')} meta="Activos, perdidos y ganados" />
-          <Kpi size="xs" label="Citas agendadas" value={k.citas} meta={`${pct(k.citas, k.total)}% del total`} />
-          <Kpi size="xs" label="Visitas realizadas" value={k.visitas} meta={`${pct(k.visitas, k.total)}% del total`} />
-          {/* Etapa alcanzada, igual que citas y visitas. */}
-          <Kpi
-            size="xs"
-            label="Negociaciones"
-            value={k.negociaciones}
-            meta={`${pct(k.negociaciones, k.total)}% del total`}
-            sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
-          />
-          {/* Venta = trato ganado, por fecha de ganado. Las separaciones no suman. */}
-          <Kpi
-            size="xs"
-            label="Ventas"
-            value={k.ganados}
-            meta={`${pct(k.ganados, k.total)}% del total`}
-            sub={`${pct(k.ganados, k.visitas)}% de las visitas`}
-          />
-          <Kpi size="xs" label="Tasa Lead→Cita" value={`${pct(k.citas, k.total)}%`} meta={`${k.citas} citas de ${k.total} leads`} />
-          <Kpi
-            size="xs"
-            label="Tasa Visita→Sep"
-            value={`${pct(k.separaciones + k.ganados, k.visitas)}%`}
-            meta={`${k.separaciones + k.ganados} cierres de ${k.visitas} visitas`}
-          />
-          <Kpi size="xs" label="Tasa de pérdida" value={`${pct(k.perdidos, k.total)}%`} meta={`${k.perdidos} de ${k.total}`} />
-        </KpiGrid>
-        <TasasMercado digital={filters.digital} />
-      </Section>
+      <KpisGenerales filtered={filtered} ganados={ganados} filters={filters} />
 
       {/* 02 · Gestión Comercial */}
       <Section title="02 · Gestión Comercial" sub="Actividad y eficiencia del equipo comercial">

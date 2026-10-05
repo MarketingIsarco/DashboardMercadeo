@@ -119,6 +119,26 @@ export interface Lead {
    * semana, y esa respuesta es suya.
    */
   firstContactBy: number;
+
+  /**
+   * Índice en `Meta.etapasCrm`: la etapa **tal como se llama en Pipedrive**.
+   *
+   * `stage` colapsa los pipelines al embudo unificado ("Segunda Visita" cuenta
+   * como "Visitado"); aquí se conserva el nombre real, que es el que el asesor
+   * ve en su CRM. Lo usa el panel de la pestaña Comercial INM.
+   */
+  etapaCrm: number;
+
+  /**
+   * Ficha del cliente de la inmobiliaria, en el orden de `FICHA_INM_CAMPOS`
+   * (inmueble, tipo, entrega, presupuesto, área). Misma convención que
+   * `perfil`: índice en `Meta.ficha[i].values` para los categóricos, valor
+   * crudo para presupuesto y área, `-1` sin diligenciar.
+   *
+   * Sólo se llena en tratos de proyectos de la inmobiliaria, y llega **vacío**
+   * (`[]`) cuando no tiene ningún campo: leer siempre con `fichaVal`.
+   */
+  ficha: number[];
 }
 
 /**
@@ -226,6 +246,19 @@ export interface Meta {
    * `Lead.perfil` apuntan a `values`, así que los dos viajan siempre juntos.
    */
   perfil: PerfilCampoMeta[];
+  /** Un elemento por campo de `FICHA_INM_CAMPOS`, igual que `perfil`. */
+  ficha: PerfilCampoMeta[];
+  /**
+   * Nombres de etapa de Pipedrive, sin repetir, en el orden del embudo
+   * (Interesado … Segunda Visita … Estudio Documentación).
+   */
+  etapasCrm: string[];
+  /**
+   * Por índice de `PROJECTS`: los índices de `etapasCrm` que tiene ese
+   * pipeline, en su orden. Es lo que deja dibujar el embudo de Oficinas con
+   * sus propias etapas y no con las de Inari.
+   */
+  etapasPorProyecto: number[][];
 }
 
 /** Valores que el CRM trae hoy para un campo de perfilamiento. */
