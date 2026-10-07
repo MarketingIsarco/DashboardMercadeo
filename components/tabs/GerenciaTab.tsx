@@ -10,7 +10,9 @@ import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { MonthSelect } from '@/components/ui/MonthSelect';
+import { Popover } from '@/components/ui/Popover';
 import { Section } from '@/components/ui/Section';
+import { Segmented } from '@/components/ui/Segmented';
 import { MONTH_SHORT, PROJECTS, PROJECT_COLORS, STAGES } from '@/lib/config/negocio';
 import { crucesDeGestion, totalCruces } from '@/lib/cruces';
 import type { CruceAsesor } from '@/lib/cruces';
@@ -27,6 +29,7 @@ import {
 import type { ActivityState, SerieAsesor } from '@/lib/gestion';
 import { applyFilters, isAbierto, isPerdido, mesGanado } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
+import { STATUS_LOST, STATUS_WON } from '@/lib/types';
 import type { ActivityDay, DashboardData, Lead, Meeting, Meta } from '@/lib/types';
 
 /**
@@ -699,6 +702,10 @@ function PrimerContacto({
       <div className="mt-7 border-t border-border pt-5">
         <TablaAsesores rows={rows} global={global} acciones={acciones} advisors={advisors} />
       </div>
+
+      <div className="mt-7 border-t border-border pt-5">
+        <ContactoTardio leads={leads} advisors={advisors} />
+      </div>
     </Section>
   );
 }
@@ -1094,6 +1101,177 @@ function TablaAsesores({
       />
 
       {abierto ? <DetalleCruce cruce={abierto} onCerrar={() => setDetalle(null)} /> : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 04 · Tratos atendidos en más de 24 h
+//
+// El detalle nominal de la columna "> 24 h" del resumen: mismo universo
+// (`leads` filtrados), mismo corte (`h > 24`, el último de
+// `CORTES_VELOCIDAD_H`) y misma atribución (`firstContactBy`, quien CREÓ la
+// primera actividad). Así la suma de la tabla cuadra siempre con esa columna.
+//
+// Los tratos sin ninguna actividad no entran: no tienen tiempo de atención que
+// medir, y tampoco están en la columna del resumen.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Umbral de la tabla: el inicio de la última banda de velocidad. */
+const UMBRAL_TARDIO_H = CORTES_VELOCIDAD_H[CORTES_VELOCIDAD_H.length - 1];
+
+const ROJO_TARDIO = BANDAS_VELOCIDAD[BANDAS_VELOCIDAD.length - 1].texto;
+
+type FiltroEstado = 'todos' | 'abiertos';
+
+function estadoTrato(l: Lead): { label: string; color: string } {
+  if (l.status === STATUS_WON) return { label: 'Ganado', color: '#16a34a' };
+  if (l.status === STATUS_LOST) return { label: 'Perdido', color: '#94a3b8' };
+  return { label: 'Abierto', color: '#0e6680' };
+}
+
+function ContactoTardio({ leads, advisors }: { leads: Lead[]; advisors: string[] }) {
+  const [estado, setEstado] = useState<FiltroEstado>('todos');
+  /** Índice del asesor que atendió; `null` = todos. */
+  const [asesor, setAsesor] = useState<number | null>(null);
+
+  const tardios = useMemo(
+    () =>
+      leads
+        .filter(
+          (l) =>
+            l.firstContactHours !== null &&
+            l.firstContactBy >= 0 &&
+            l.firstContactHours > UMBRAL_TARDIO_H,
+        )
+        .sort((a, b) => b.firstContactHours! - a.firstContactHours!),
+    [leads],
+  );
+
+  // Asesores con al menos un trato tardío, del que más tiene al que menos.
+  const opciones = useMemo(() => {
+    const n = new Map<number, number>();
+    for (const l of tardios) n.set(l.firstContactBy, (n.get(l.firstContactBy) ?? 0) + 1);
+    return [...n.entries()].sort((a, b) => b[1] - a[1]);
+  }, [tardios]);
+
+  // Si el filtro global saca al asesor elegido, se vuelve a "todos".
+  const asesorActivo = asesor !== null && opciones.some(([i]) => i === asesor) ? asesor : null;
+
+  const visibles = tardios.filter(
+    (l) =>
+      (asesorActivo === null || l.firstContactBy === asesorActivo) &&
+      (estado === 'todos' || isAbierto(l)),
+  );
+  const abiertos = tardios.filter(isAbierto).length;
+
+  const nombre = (i: number) => firstName(advisors[i] ?? `#${i}`);
+  const num = (v: number) => v.toLocaleString('es-CO');
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-xs font-semibold text-dim">
+            Tratos atendidos en más de {UMBRAL_TARDIO_H} h
+          </h3>
+          <p className="text-2xs text-muted">
+            <b style={{ color: ROJO_TARDIO }}>{num(tardios.length)} tratos</b> recibieron su primera
+            actividad más de {UMBRAL_TARDIO_H} h después de entrar al CRM ({num(abiertos)} siguen
+            abiertos) · es el detalle de la columna &gt; {UMBRAL_TARDIO_H} h del resumen, acreditado a
+            quien <b>creó</b> esa primera actividad · del más lento al más rápido
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Popover
+            label={asesorActivo === null ? 'Todos los asesores' : nombre(asesorActivo)}
+            active={asesorActivo !== null}
+            align="right"
+            width={220}
+          >
+            {(close) => (
+              <div className="max-h-64 overflow-y-auto" aria-label="Asesor que atendió">
+                {[[null, tardios.length] as [number | null, number], ...opciones].map(([i, n]) => {
+                  const selected = i === asesorActivo;
+                  return (
+                    <button
+                      key={String(i)}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setAsesor(i);
+                        close();
+                      }}
+                      className={`flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[11px] transition-colors ${
+                        selected ? 'bg-accent-soft font-semibold text-accent' : 'text-dim hover:bg-accent-soft'
+                      }`}
+                    >
+                      <span>{i === null ? 'Todos los asesores' : nombre(i)}</span>
+                      <span className="text-muted">{num(n)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Popover>
+          <Segmented<FiltroEstado>
+            label="Estado del trato"
+            value={estado}
+            onChange={setEstado}
+            segments={[
+              { value: 'todos', label: 'Todos' },
+              { value: 'abiertos', label: 'Abiertos' },
+            ]}
+          />
+        </div>
+      </div>
+
+      <DataTable
+        rows={visibles}
+        maxHeight={380}
+        empty={`Ningún trato tardó más de ${UMBRAL_TARDIO_H} h en recibir su primera actividad en el filtro actual.`}
+        columns={[
+          { header: 'Atendió', cell: (l) => <span className="font-semibold">{nombre(l.firstContactBy)}</span> },
+          { header: 'Cliente', cell: (l) => <span className="font-semibold">{l.name || '—'}</span> },
+          {
+            header: 'Proyecto',
+            cell: (l) => (
+              <span style={{ color: PROJECT_COLORS[l.project] ?? undefined }}>
+                {PROJECTS[l.project] ?? `#${l.project}`}
+              </span>
+            ),
+          },
+          {
+            header: 'Dueño',
+            cell: (l) =>
+              l.advisor === l.firstContactBy ? (
+                <span className="text-muted">El mismo</span>
+              ) : (
+                nombre(l.advisor)
+              ),
+          },
+          { header: 'ID Pipedrive', align: 'right', cell: (l) => <span className="text-muted">{l.id}</span> },
+          { header: 'Entrada', align: 'right', cell: (l) => fechaCorta(l.date) },
+          {
+            header: 'Primer contacto',
+            align: 'right',
+            cell: (l) => <b style={{ color: ROJO_TARDIO }}>{fmtHoras(l.firstContactHours!)}</b>,
+          },
+          { header: 'Etapa', cell: (l) => STAGES[l.stage] ?? '—' },
+          {
+            header: 'Estado',
+            cell: (l) => {
+              const e = estadoTrato(l);
+              return <span style={{ color: e.color }} className="font-semibold">{e.label}</span>;
+            },
+          },
+        ]}
+      />
+      {visibles.length ? (
+        <p className="mt-2 text-2xs text-muted">
+          Mostrando {num(visibles.length)} de {num(tardios.length)} tratos
+        </p>
+      ) : null}
     </div>
   );
 }
