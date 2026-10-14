@@ -1,19 +1,18 @@
 import {
   CONSTRUCTORA_IDX,
-  INMOBILIARIA_IDX,
   META,
+  metasEtapa,
+  STAGE_CONTACTADO,
   MIN_YEAR,
   STAGE_CITA,
   STAGE_NEGOCIACION,
   STAGE_SEPARACION,
   STAGE_VISITA,
 } from '@/lib/config/negocio';
-import type { Goal } from '@/lib/config/negocio';
+import type { Goal, MetasEtapa } from '@/lib/config/negocio';
 import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import type { DashboardData, Lead, Meta, Status } from '@/lib/types';
 
-export type Unidad = 'constructora' | 'inmobiliaria' | null;
-export type Period = 'month' | 'year';
 
 export interface FilterState {
   /** Meses `YYYY-MM` incluidos. Vacío = todos. */
@@ -22,6 +21,15 @@ export interface FilterState {
   exMonths: string[];
   status: Status[];
   exStatus: Status[];
+  /**
+   * Índices en `STAGES` de la etapa **actual** del trato. Vacío = todas.
+   *
+   * Es la etapa donde está parado hoy, no la más avanzada que alcanzó: ver
+   * `STAGE_FILTER_IDX` en `config/negocio.ts`.
+   */
+  stages: number[];
+  /** Etapas actuales excluidas explícitamente. Gana sobre `stages`. */
+  exStages: number[];
   /** Índices en `meta.sources`. */
   sources: number[];
   /** Índices en `meta.campaigns`. */
@@ -37,8 +45,6 @@ export interface FilterState {
   /** `true` = sólo digital, `false` = sólo no-digital, `null` = ambos. */
   digital: boolean | null;
   year: string | null;
-  unidad: Unidad;
-  period: Period;
   /** `YYYY-MM-DD` inclusivo. */
   dateFrom: string | null;
   dateTo: string | null;
@@ -49,18 +55,21 @@ export const defaultFilters: FilterState = {
   exMonths: [],
   status: [],
   exStatus: [],
+  stages: [],
+  exStages: [],
   sources: [],
   campaigns: [],
   labels: [],
   projects: [],
   digital: null,
   year: null,
-  unidad: null,
-  period: 'month',
   dateFrom: null,
   dateTo: null,
 };
 
+export function isContactado(l: Lead): boolean {
+  return l.stage >= STAGE_CONTACTADO;
+}
 export function isCita(l: Lead): boolean {
   return l.stage >= STAGE_CITA;
 }
@@ -92,8 +101,31 @@ export function isVenta(l: Lead): boolean {
   return l.stage >= STAGE_SEPARACION || l.status === STATUS_WON;
 }
 
-/** Aplica todos los filtros activos. Orden: del predicado más barato al más caro. */
-export function applyFilters(leads: Lead[], st: FilterState, digitalSources: number[]): Lead[] {
+/**
+ * Con qué fecha se ubica un trato en el tiempo.
+ *
+ * · `creacion` — `add_time`. Es el eje de todo el dashboard: leads, citas,
+ *   visitas, pérdidas, embudo.
+ * · `ganado` — `won_time`. Es el eje de **los ganados**, y sólo de ellos: un
+ *   trato ganado cuenta en el mes en que se ganó, no en el que entró al CRM.
+ */
+export type EjeFecha = 'creacion' | 'ganado';
+
+/**
+ * Aplica todos los filtros activos. Orden: del predicado más barato al más caro.
+ *
+ * Con `eje = 'ganado'` devuelve **sólo tratos ganados**, y el periodo (año,
+ * meses, rango de fechas) se evalúa contra la fecha de ganado. El resto de
+ * filtros se aplica igual, así que los dos conjuntos son comparables: mismo
+ * proyecto, canal, fuente, campaña, etiqueta, estado y etapa.
+ */
+export function applyFilters(
+  leads: Lead[],
+  st: FilterState,
+  digitalSources: number[],
+  eje: EjeFecha = 'creacion',
+): Lead[] {
+  const porGanado = eje === 'ganado';
   const digitalSet = new Set(digitalSources);
   const projectSet = st.projects.length ? new Set(st.projects) : null;
   const sourceSet = st.sources.length ? new Set(st.sources) : null;
@@ -101,20 +133,28 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
   const labelSet = st.labels.length ? new Set(st.labels) : null;
   const statusSet = st.status.length ? new Set(st.status) : null;
   const exStatusSet = st.exStatus.length ? new Set(st.exStatus) : null;
+  const stageSet = st.stages.length ? new Set(st.stages) : null;
+  const exStageSet = st.exStages.length ? new Set(st.exStages) : null;
   const monthSet = st.months.length ? new Set(st.months) : null;
   const exMonthSet = st.exMonths.length ? new Set(st.exMonths) : null;
 
   return leads.filter((l) => {
+    if (porGanado && l.status !== STATUS_WON) return false;
     if (projectSet && !projectSet.has(l.project)) return false;
-    if (st.unidad === 'constructora' && !CONSTRUCTORA_IDX.includes(l.project)) return false;
-    if (st.unidad === 'inmobiliaria' && !INMOBILIARIA_IDX.includes(l.project)) return false;
 
-    if (st.year !== null && l.date.slice(0, 4) !== st.year) return false;
-    if (monthSet && !monthSet.has(l.month)) return false;
-    if (exMonthSet && exMonthSet.has(l.month)) return false;
+    const date = porGanado ? l.wonDate : l.date;
+    const month = porGanado ? l.wonMonth : l.month;
+
+    if (st.year !== null && date.slice(0, 4) !== st.year) return false;
+    if (monthSet && !monthSet.has(month)) return false;
+    if (exMonthSet && exMonthSet.has(month)) return false;
 
     if (statusSet && !statusSet.has(l.status)) return false;
     if (exStatusSet && exStatusSet.has(l.status)) return false;
+
+    // Etapa actual, no alcanzada: comparación exacta, no `>=`.
+    if (stageSet && !stageSet.has(l.stage)) return false;
+    if (exStageSet && exStageSet.has(l.stage)) return false;
 
     if (st.digital === true && !digitalSet.has(l.source)) return false;
     if (st.digital === false && digitalSet.has(l.source)) return false;
@@ -122,8 +162,8 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
     if (sourceSet && !sourceSet.has(l.source)) return false;
     if (campaignSet && !campaignSet.has(l.campaign)) return false;
 
-    if (st.dateFrom && l.date < st.dateFrom) return false;
-    if (st.dateTo && l.date > st.dateTo) return false;
+    if (st.dateFrom && date < st.dateFrom) return false;
+    if (st.dateTo && date > st.dateTo) return false;
 
     // Va de último porque es el único predicado que recorre un arreglo.
     if (labelSet && !l.labels.some((i) => labelSet.has(i))) return false;
@@ -133,29 +173,92 @@ export function applyFilters(leads: Lead[], st: FilterState, digitalSources: num
 }
 
 /**
- * Eje temporal derivado de los datos filtrados.
- * En `period: 'year'` agrupa por año; si no, por mes.
+ * Tratos ganados **en** el periodo filtrado, por fecha de ganado.
+ *
+ * Es la fuente de todo conteo de "ganados" del dashboard. `filtered` sigue
+ * siendo el universo por fecha de creación; contar `filtered.filter(isGanado)`
+ * da los ganados de los leads que *entraron* en el periodo, que es otra
+ * pregunta (la de las cohortes).
  */
-export function timeAxis(leads: Lead[], period: Period): {
-  keys: string[];
-  labels: string[];
-  isYear: boolean;
-} {
-  const isYear = period === 'year';
-  const keys = [...new Set(leads.map((l) => (isYear ? l.date.slice(0, 4) : l.month)))]
-    .filter((k) => k.slice(0, 4) >= MIN_YEAR)
-    .sort();
-  return { keys, labels: keys, isYear };
+export function ganadosDelPeriodo(leads: Lead[], st: FilterState, digitalSources: number[]): Lead[] {
+  return applyFilters(leads, st, digitalSources, 'ganado');
 }
 
-export function keyOf(lead: Lead, isYear: boolean): string {
-  return isYear ? lead.date.slice(0, 4) : lead.month;
+/**
+ * Separaciones + ganados del periodo. **No es "Ventas"**: una venta es sólo un
+ * trato ganado, y para eso está `ganados` directamente. Esto queda para las
+ * series rotuladas "Sep+Cierres" / "% Ganados/Sep".
+ *
+ * Separaciones que el CRM todavía no marcó como ganadas
+ * (por fecha de creación, que es la única que tienen) + los ganados del
+ * periodo por fecha de ganado.
+ *
+ * Una separación que ya se ganó sale del primer grupo y entra por el segundo:
+ * nunca cuenta dos veces.
+ */
+export function ventasDelPeriodo(filtered: Lead[], ganados: Lead[]): Lead[] {
+  return [...filtered.filter((l) => isVenta(l) && !isGanado(l)), ...ganados];
+}
+
+/** Mes en que un trato cuenta como venta: el de ganado si está ganado, el de creación si no. */
+export function mesVenta(l: Lead): string {
+  return l.status === STATUS_WON ? l.wonMonth : l.month;
+}
+
+/** Mes en que un ganado cuenta como tal. Igual que `mesVenta`, con nombre de lo que se lee. */
+export function mesGanado(l: Lead): string {
+  return l.wonMonth;
+}
+
+/**
+ * Eje temporal para una gráfica que mezcla leads (por creación) con ventas o
+ * ganados (por ganado): la unión de los meses de los dos, para que un ganado
+ * de un mes sin leads nuevos no desaparezca de la gráfica.
+ */
+export function timeAxisCon(leads: Lead[], ventas: Lead[]): { keys: string[] } {
+  const keys = [...new Set([...leads.map((l) => l.month), ...ventas.map(mesVenta)])]
+    .filter((k) => k && k.slice(0, 4) >= MIN_YEAR)
+    .sort();
+  return { keys };
+}
+
+/**
+ * Eje temporal derivado de los datos filtrados. Siempre agrupa por mes.
+ *
+ * Antes existía un control "Agrupar por" (Mes / Año) en la barra principal que
+ * hacía a esta función devolver años. Se quitó: para mirar un año completo se
+ * usa el filtro de Periodo, que ya deja escoger el año, y tener dos maneras de
+ * recortar el mismo eje era la forma de que dos gráficas contaran distinto.
+ */
+export function timeAxis(leads: Lead[]): { keys: string[] } {
+  const keys = [...new Set(leads.map((l) => l.month))]
+    .filter((k) => k.slice(0, 4) >= MIN_YEAR)
+    .sort();
+  return { keys };
+}
+
+export function keyOf(lead: Lead): string {
+  return lead.month;
 }
 
 export interface Kpis {
   total: number;
+  /**
+   * Leads que **alcanzaron** Contactado, con el mismo criterio que citas y
+   * visitas (`stage >= X`). Es el primer escalón real del embudo: la diferencia
+   * contra el total son los leads que nadie tocó todavía.
+   */
+  contactados: number;
   citas: number;
   visitas: number;
+  /**
+   * Leads que **alcanzaron** Negociación, contando igual que citas y visitas
+   * (`stage >= X`), no los que están parados ahí hoy — eso es `enNegociacion`.
+   *
+   * Sin este dato el embudo de los indicadores generales saltaba de Visitas a
+   * Separación, que es justo donde se cae la mitad del pipeline.
+   */
+  negociaciones: number;
   separaciones: number;
   ganados: number;
   perdidos: number;
@@ -166,17 +269,24 @@ export interface Kpis {
   cierresProyectados: number;
 }
 
-export function computeKpis(f: Lead[]): Kpis {
+/**
+ * `ganados` es el conjunto por fecha de ganado (`ganadosDelPeriodo`). Si no se
+ * pasa, cae a los ganados de `f` — sólo sirve cuando `f` no está recortado en
+ * el tiempo.
+ */
+export function computeKpis(f: Lead[], ganados: Lead[] = f.filter(isGanado)): Kpis {
   const abiertos = f.filter(isAbierto);
   const enNegociacion = abiertos.filter((l) => l.stage === STAGE_NEGOCIACION).length;
   const enSeparacion = abiertos.filter((l) => l.stage === STAGE_SEPARACION).length;
 
   return {
     total: f.length,
+    contactados: f.filter(isContactado).length,
     citas: f.filter(isCita).length,
     visitas: f.filter(isVisita).length,
+    negociaciones: f.filter(isNegociacion).length,
     separaciones: f.filter(isSeparacion).length,
-    ganados: f.filter(isGanado).length,
+    ganados: ganados.length,
     perdidos: f.filter(isPerdido).length,
     abiertos: abiertos.length,
     enNegociacion,
@@ -190,27 +300,64 @@ export function computeKpis(f: Lead[]): Kpis {
  *
  * Devuelve `null` cuando la meta no tiene sentido: la inmobiliaria no tiene
  * metas definidas, así que compararse contra una suma de constructora sería
- * inventar el número.
+ * inventar el número. Con sólo proyectos de inmobiliaria seleccionados, `cons`
+ * queda vacío y se cae por ahí — es lo que antes atajaba el filtro de Unidad.
  */
 export function goalFor(st: FilterState): Goal | null {
-  if (st.unidad === 'inmobiliaria') return null;
-
   const cons = st.projects.filter((i) => CONSTRUCTORA_IDX.includes(i));
   if (st.projects.length && cons.length === 0) return null;
 
-  if (cons.length === 1) return META[cons[0]] ?? null;
+  let base;
+  if (cons.length === 1) {
+    base = META[cons[0]];
+    if (!base) return null;
+  } else {
+    // Sin proyecto seleccionado (o varios): meta agregada de la constructora.
+    // Tinguazul 1 comparte la meta de 2A, así que sumarlo la duplicaría.
+    const inari = META[0];
+    const tng = META[1];
+    base = { leads: inari.leads + tng.leads, cierres: inari.cierres + tng.cierres };
+  }
 
-  // Sin proyecto seleccionado (o varios): meta agregada de la constructora.
-  // Tinguazul 1 comparte la meta de 2A, así que sumarlo la duplicaría.
-  const inari = META[0];
-  const tng = META[1];
+  // Las metas de etapa se derivan de la meta de leads y del canal filtrado.
+  // Se calculan sobre `base.leads` ya agregado, no sumando las de cada
+  // proyecto: redondear dos veces y sumar da un número distinto de redondear
+  // el total una vez, y el tablero mostraría metas que no cuadran entre sí.
+  const digital = metasEtapa(base.leads, true);
+  const noDigital = metasEtapa(base.leads, false);
+
   return {
-    leads: inari.leads + tng.leads,
-    citas: inari.citas + tng.citas,
-    visitas: inari.visitas + tng.visitas,
-    cierres: inari.cierres + tng.cierres,
-    tasa: (inari.tasa + tng.tasa) / 2,
+    leads: base.leads,
+    cierres: base.cierres,
+    tasa: base.leads ? (base.cierres / base.leads) * 100 : 0,
+    etapas: st.digital === null ? null : st.digital ? digital : noDigital,
+    porCanal: { digital, noDigital },
   };
+}
+
+/**
+ * Texto de la meta de una etapa, listo para el rótulo del KPI.
+ *
+ * Sin canal escogido no hay una sola meta, así que muestra las dos referencias
+ * en vez de callarlas: el usuario sigue viendo contra qué compararse, y queda
+ * explícito que el número depende del canal.
+ */
+export function metaEtapa(goal: Goal | null, k: keyof MetasEtapa): string | undefined {
+  if (!goal) return undefined;
+  if (goal.etapas) return `Meta ${goal.etapas[k]}/mes`;
+  return `Meta ${goal.porCanal.digital[k]} dig · ${goal.porCanal.noDigital[k]} no dig`;
+}
+
+/**
+ * Variación contra la meta de etapa, en %.
+ *
+ * `null` mientras no haya canal escogido —no hay contra qué medir— y también
+ * cuando la meta es cero, que dividiría por cero.
+ */
+export function deltaEtapa(goal: Goal | null, k: keyof MetasEtapa, real: number): number | null {
+  if (!goal?.etapas) return null;
+  const m = goal.etapas[k];
+  return m ? ((real - m) / m) * 100 : null;
 }
 
 /** Meses presentes en los datos, ordenados y recortados a `MIN_YEAR`. */
@@ -235,7 +382,10 @@ export function countBy(leads: Lead[], pick: (l: Lead) => number, size: number):
 /** Datos + metadatos que todas las pestañas reciben. */
 export interface TabProps {
   data: DashboardData;
+  /** Leads del filtro por fecha de creación. */
   filtered: Lead[];
+  /** Ganados del filtro por fecha de ganado (`ganadosDelPeriodo`). */
+  ganados: Lead[];
   filters: FilterState;
   meta: Meta;
 }

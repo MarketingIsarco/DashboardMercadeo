@@ -27,6 +27,19 @@ export interface Lead {
   date: string;
   /** `YYYY-MM`, precomputed because every chart groups by it. */
   month: string;
+  /**
+   * `YYYY-MM-DD` en que el trato quedó **ganado** (`won_time` de Pipedrive);
+   * `''` si no está ganado.
+   *
+   * Todo conteo de ganados se ubica en el tiempo por esta fecha, no por la de
+   * creación: un trato creado en octubre y ganado en marzo es un ganado de
+   * marzo. Sin ella, la carga masiva de marzo de 2026 (tratos de 2025) dejaba
+   * los ganados apilados en el mes en que se crearon en el CRM. Ver
+   * `applyFilters(…, 'ganado')` en `lib/selectors.ts`.
+   */
+  wonDate: string;
+  /** `YYYY-MM` de `wonDate`; `''` si no está ganado. */
+  wonMonth: string;
   /** Index into `STAGES`. */
   stage: number;
   status: Status;
@@ -79,6 +92,25 @@ export interface Lead {
   firstContactHours: number | null;
 
   /**
+   * Perfilamiento del trato — los campos del capítulo 07 (Buyer Persona), en
+   * el orden de `PERFIL_CAMPOS`.
+   *
+   * Dos convenciones en un solo arreglo, para no mandar trece `null` por trato:
+   *
+   * · Campos categóricos → **índice** en `Meta.perfil[i].values`.
+   * · Campos `histograma` (presupuesto, área) → el **valor crudo** en COP o m².
+   *   Son continuos y el corte en rangos se hace en el cliente, para poder
+   *   moverlo sin volver a pedir los datos.
+   * · En ambos casos, `-1` = sin diligenciar.
+   *
+   * Llega **vacío** (`[]`) cuando el trato no tiene ningún campo diligenciado,
+   * que hoy es ~9 de cada 10. Mandar trece `-1` por cada uno sumaba cerca de un
+   * mega de JSON que nadie lee. Quien lo consuma tiene que tolerar el arreglo
+   * vacío — para eso está `perfilVal` en `lib/buyer.ts`.
+   */
+  perfil: number[];
+
+  /**
    * Índice en `Meta.advisors` de quien **creó** la primera actividad del trato;
    * `-1` cuando no hay ninguna.
    *
@@ -87,6 +119,26 @@ export interface Lead {
    * semana, y esa respuesta es suya.
    */
   firstContactBy: number;
+
+  /**
+   * Índice en `Meta.etapasCrm`: la etapa **tal como se llama en Pipedrive**.
+   *
+   * `stage` colapsa los pipelines al embudo unificado ("Segunda Visita" cuenta
+   * como "Visitado"); aquí se conserva el nombre real, que es el que el asesor
+   * ve en su CRM. Lo usa el panel de la pestaña Comercial INM.
+   */
+  etapaCrm: number;
+
+  /**
+   * Ficha del cliente de la inmobiliaria, en el orden de `FICHA_INM_CAMPOS`
+   * (inmueble, tipo, entrega, presupuesto, área). Misma convención que
+   * `perfil`: índice en `Meta.ficha[i].values` para los categóricos, valor
+   * crudo para presupuesto y área, `-1` sin diligenciar.
+   *
+   * Sólo se llena en tratos de proyectos de la inmobiliaria, y llega **vacío**
+   * (`[]`) cuando no tiene ningún campo: leer siempre con `fichaVal`.
+   */
+  ficha: number[];
 }
 
 /**
@@ -100,6 +152,10 @@ export interface SaleDeal {
   /** Coincide con `Lead.id`, para poder filtrarlas con los mismos filtros. */
   id: number;
   name: string;
+  /**
+   * Fecha de la venta: la de ganado (`won_time`) si el trato está ganado, la
+   * de creación si es una separación que el CRM todavía no marcó.
+   */
   date: string;
   source: string;
   isDigital: boolean;
@@ -143,10 +199,17 @@ export interface Meeting {
  * capítulo pueda aplicarle los filtros globales cruzando por trato, igual que
  * el mapa de calor de reuniones.
  *
- * El asesor es el **usuario asignado a la actividad**, no el dueño del trato:
- * lo que se mide es quién gestionó, no de quién era el lead. Atribuir por dueño
- * del trato le cargaba a un asesor toda la gestión que otros —o una
- * automatización— hacían sobre sus leads, y el número no cuadraba con el CRM.
+ * El asesor es quien **creó** la actividad (`created_by_user_id`), no su
+ * responsable ni el dueño del trato: lo que se mide es quién gestionó, no de
+ * quién era el lead.
+ *
+ * ⚠️ La contracara: en Pipedrive el creador de una actividad nacida de una
+ * automatización o de la API es el usuario dueño del token, así que ese usuario
+ * acumula gestión que ninguna persona hizo. Por eso el capítulo 04 marca los
+ * cruces de proyecto (`lib/cruces.ts`) en vez de confiar en el conteo a ciegas.
+ * Es también la razón por la que este número no coincide con "actividades
+ * abiertas de X" en el CRM: allá se filtra por responsable y sólo las
+ * pendientes; aquí se cuenta por creador, hechas y pendientes.
  *
  * La fecha es la **de creación** (`add_time`), ya convertida a hora de Bogotá:
  * el día en que el asesor dejó constancia de la gestión, no aquel para el que
@@ -156,7 +219,7 @@ export interface Meeting {
 export interface ActivityDay {
   /** Coincide con `Lead.id`: es la llave para aplicarle los filtros globales. */
   dealId: number;
-  /** Índice en `Meta.advisors` del usuario asignado a la actividad. */
+  /** Índice en `Meta.advisors` de quien creó la actividad. */
   advisor: number;
   /** `YYYY-MM-DD` en que se creó la actividad, en hora de Bogotá. */
   date: string;
@@ -178,6 +241,40 @@ export interface Meta {
   lossReasons: string[];
   /** Indices into `sources` that count as paid/organic digital traffic. */
   digitalSources: number[];
+  /**
+   * Un elemento por campo de `PERFIL_CAMPOS`, en el mismo orden. Los índices de
+   * `Lead.perfil` apuntan a `values`, así que los dos viajan siempre juntos.
+   */
+  perfil: PerfilCampoMeta[];
+  /** Un elemento por campo de `FICHA_INM_CAMPOS`, igual que `perfil`. */
+  ficha: PerfilCampoMeta[];
+  /**
+   * Nombres de etapa de Pipedrive, sin repetir, en el orden del embudo
+   * (Interesado … Segunda Visita … Estudio Documentación).
+   */
+  etapasCrm: string[];
+  /**
+   * Por índice de `PROJECTS`: los índices de `etapasCrm` que tiene ese
+   * pipeline, en su orden. Es lo que deja dibujar el embudo de Oficinas con
+   * sus propias etapas y no con las de Inari.
+   */
+  etapasPorProyecto: number[][];
+}
+
+/** Valores que el CRM trae hoy para un campo de perfilamiento. */
+export interface PerfilCampoMeta {
+  /**
+   * Valores distintos hallados en la carga, con el orden canónico del campo
+   * primero y lo que el CRM haya traído de más después. Vacío en los campos
+   * numéricos, que no tienen categorías.
+   */
+  values: string[];
+  /**
+   * `true` cuando el campo no existe hoy en Pipedrive con ninguno de sus
+   * alias. El capítulo lo dibuja apagado en vez de mostrar una gráfica vacía
+   * que se leería como "nadie lo diligencia".
+   */
+  ausente: boolean;
 }
 
 export interface DashboardData {

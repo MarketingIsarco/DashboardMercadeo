@@ -34,18 +34,17 @@ const CERO: Totales = { total: 0, digital: 0, noDigital: 0 };
  *
  * Un filtro de proyecto tiene que arrastrar la inversión: si el usuario mira
  * sólo Inari, el gasto de Tinguazul no puede seguir sumando en el CPL.
+ *
+ * Sin proyecto seleccionado entran las tres bolsas. El filtro de Unidad, que
+ * antes acotaba a constructora o inmobiliaria sin tocar proyectos, ya no
+ * existe: para ver una sola unidad hay que seleccionar sus proyectos, y la
+ * bolsa sale de ahí.
  */
 export function bolsasActivas(filters: FilterState): Bolsa[] {
-  const enUnidad = (b: Bolsa): boolean => {
-    if (filters.unidad === 'constructora') return b !== 'inm';
-    if (filters.unidad === 'inmobiliaria') return b === 'inm';
-    return true;
-  };
-
-  if (!filters.projects.length) return BOLSAS.filter(enUnidad);
+  if (!filters.projects.length) return BOLSAS;
 
   const proyectos = new Set(filters.projects);
-  return BOLSAS.filter((b) => enUnidad(b) && BOLSA_PROJECTS[b].some((p) => proyectos.has(p)));
+  return BOLSAS.filter((b) => BOLSA_PROJECTS[b].some((p) => proyectos.has(p)));
 }
 
 /**

@@ -5,12 +5,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import logoIsarco from '@/public/isarco-logo.png';
 import { FilterBar } from '@/components/FilterBar';
 import { ensureChartsRegistered } from '@/components/charts/setup';
+import { ComercialInmTab } from '@/components/tabs/ComercialInmTab';
 import { ComercialTab } from '@/components/tabs/ComercialTab';
 import { ComparativoTab } from '@/components/tabs/ComparativoTab';
 import { GerenciaTab } from '@/components/tabs/GerenciaTab';
 import { MercadeoTab } from '@/components/tabs/MercadeoTab';
 import { ResultadosTab } from '@/components/tabs/ResultadosTab';
-import { applyFilters, availableMonths, availableYears, defaultFilters } from '@/lib/selectors';
+import {
+  applyFilters,
+  availableMonths,
+  availableYears,
+  defaultFilters,
+  ganadosDelPeriodo,
+} from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { DashboardData } from '@/lib/types';
 
@@ -19,7 +26,10 @@ ensureChartsRegistered();
 const TABS = [
   { id: 'resultados', label: 'Resultados', Component: ResultadosTab },
   { id: 'mercadeo', label: 'Mercadeo', Component: MercadeoTab },
-  { id: 'comercial', label: 'Comercial', Component: ComercialTab },
+  // COIS: la pestaña "Comercial" de siempre, sin cambios.
+  { id: 'comercial', label: 'Comercial COIS', Component: ComercialTab },
+  // INM = inmobiliaria: sólo Oficinas, Locales, Bodegas, Coworking y Otros.
+  { id: 'comercialInm', label: 'Comercial INM', Component: ComercialInmTab },
   { id: 'comp', label: 'Comparativo', Component: ComparativoTab },
   { id: 'gerencia', label: 'Gerencia', Component: GerenciaTab },
 ] as const;
@@ -67,6 +77,12 @@ export function DashboardShell() {
 
   const filtered = useMemo(
     () => (data ? applyFilters(data.leads, filters, data.meta.digitalSources) : []),
+    [data, filters],
+  );
+
+  // Mismos filtros, pero el periodo se mide por fecha de ganado.
+  const ganados = useMemo(
+    () => (data ? ganadosDelPeriodo(data.leads, filters, data.meta.digitalSources) : []),
     [data, filters],
   );
 
@@ -171,7 +187,7 @@ export function DashboardShell() {
                 Mostrando datos en caché — la última actualización falló: {error}
               </p>
             ) : null}
-            <TabView data={data} filtered={filtered} filters={filters} meta={data.meta} Active={Active} />
+            <TabView data={data} filtered={filtered} ganados={ganados} filters={filters} meta={data.meta} Active={Active} />
           </>
         ) : null}
       </main>

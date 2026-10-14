@@ -4,6 +4,8 @@ import {
   CONSTRUCTORA_IDX,
   CRM_UTC_OFFSET_HOURS,
   DIGITAL_SOURCES,
+  FICHA_INM_CAMPOS,
+  INMOBILIARIA_IDX,
   LOSS_GROUP_RULES,
   MEETING_TYPES,
   PIPELINE_TO_PROJECT,
@@ -45,6 +47,7 @@ import {
   resolveBase,
 } from './client';
 import type { PipedriveActivity, PipedriveDeal } from './client';
+import { buildPerfilExtractor } from './perfil';
 
 function classifyLossGroup(reason: string): LossGroup | '' {
   if (!reason) return '';
@@ -332,6 +335,46 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   // "Trato - Etiqueta" es un enum nativo: el deal guarda ids de opción, y las
   // etiquetas (nombre y color) viven en la definición del campo.
+  // Los trece campos del buyer persona se localizan por nombre, no por hash
+  // (el porqué está en `perfil.ts`). Devuelve un extractor que ya sabe resolver
+  // ids de opción y va internando los valores que aparecen.
+  const perfil = buildPerfilExtractor(dealFields);
+  // Ficha del cliente de la inmobiliaria — mismo mecanismo, otra lista.
+  const ficha = buildPerfilExtractor(dealFields, FICHA_INM_CAMPOS);
+
+  // Etapas con su nombre real de Pipedrive, en el orden del embudo. Un mismo
+  // nombre aparece en varios pipelines, así que se fusionan: cada etapa nueva
+  // se inserta justo después de la que la precede en su propio pipeline. Así
+  // "Segunda Visita" queda entre Visitado y Negociación, y "Estudio
+  // Documentación" después de Firma & Entrega. Ordenar por `order_nr` no
+  // sirve: la etapa 5 de Inari es Negociación y la 5 de Oficinas, Segunda Visita.
+  const proyectoDePipeline = new Map(
+    pipelines.map((p) => [p.id, PIPELINE_TO_PROJECT[p.name]] as const),
+  );
+  const etapasDePipeline = new Map<number, string[]>();
+  for (const s of [...stages].sort((a, b) => a.order_nr - b.order_nr)) {
+    if (proyectoDePipeline.get(s.pipeline_id) === undefined) continue;
+    const l = etapasDePipeline.get(s.pipeline_id) ?? [];
+    l.push(s.name);
+    etapasDePipeline.set(s.pipeline_id, l);
+  }
+  const etapasCrm: string[] = [];
+  for (const nombres of etapasDePipeline.values()) {
+    nombres.forEach((n, i) => {
+      if (etapasCrm.includes(n)) return;
+      const previa = i > 0 ? etapasCrm.indexOf(nombres[i - 1]) : -1;
+      etapasCrm.splice(previa + 1, 0, n);
+    });
+  }
+  const etapaCrmIdx = new Map(etapasCrm.map((n, i) => [n, i]));
+  const etapasPorProyecto: number[][] = PROJECTS.map(() => []);
+  for (const s of [...stages].sort((a, b) => a.order_nr - b.order_nr)) {
+    const pr = proyectoDePipeline.get(s.pipeline_id);
+    const i = etapaCrmIdx.get(s.name);
+    if (pr === undefined || i === undefined || etapasPorProyecto[pr].includes(i)) continue;
+    etapasPorProyecto[pr].push(i);
+  }
+
   const etiquetaField = dealFields.find((f) => f.key === FIELD.ETIQUETA);
   const etiquetaNames = new Map<string, string>(
     (etiquetaField?.options ?? []).map((o) => [String(o.id), o.label]),
@@ -372,6 +415,12 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const date = deal.add_time.slice(0, 10);
     const stage = STAGE_TO_IDX[stageName.get(deal.stage_id) ?? ''] ?? 0;
     const status = toStatus(deal.status);
+    // Misma convención que `date` (los 10 primeros caracteres, sin mover de
+    // zona), para que un trato creado y ganado el mismo día caiga en el mismo
+    // mes por las dos fechas. `close_time` es el respaldo por si la cuenta no
+    // expone `won_time`; en un ganado las dos coinciden.
+    const wonDate =
+      status === STATUS_WON ? dateOnly(deal.won_time) || dateOnly(deal.close_time) || date : '';
 
     const rawFuente = deal[FIELD.FUENTE];
     const sourceLabel =
@@ -414,6 +463,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
       id: deal.id,
       date,
       month: date.slice(0, 7),
+      wonDate,
+      wonMonth: wonDate.slice(0, 7),
       stage,
       status,
       lossGroup: isLost ? classifyLossGroup(reason) : '',
@@ -433,8 +484,13 @@ export async function loadDashboardData(): Promise<DashboardData> {
       lastActivity: dateOnly(deal.last_activity_date),
       name,
       phone,
+      perfil: perfil.extract(deal),
       firstContactHours: firstContactHours(deal, primera?.ts),
       firstContactBy: primera ? advisorDeUsuario(primera.creador) : -1,
+      etapaCrm: etapaCrmIdx.get(stageName.get(deal.stage_id) ?? '') ?? -1,
+      // Sólo la inmobiliaria: en la constructora estos campos no aplican y
+      // mandarlos inflaría el JSON.
+      ficha: INMOBILIARIA_IDX.includes(project) ? ficha.extract(deal) : [],
     });
 
     // Una separación abierta ya es una venta comprometida, aunque el CRM
@@ -443,7 +499,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       sales.push({
         id: deal.id,
         name,
-        date,
+        date: wonDate || date,
         source: sourceLabel,
         isDigital: DIGITAL_SOURCES.includes(normalize(sourceLabel)),
         category: CONSTRUCTORA_IDX.includes(project) ? 'Constructora' : 'Inmobiliaria',
@@ -473,6 +529,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
     advisors,
     lossReasons,
     digitalSources,
+    perfil: perfil.meta(),
+    ficha: ficha.meta(),
+    etapasCrm,
+    etapasPorProyecto,
   };
 
   return {

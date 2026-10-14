@@ -71,10 +71,29 @@ export const STAGE_TO_IDX: Record<string, number> = {
 };
 
 /** Umbrales del embudo, por índice de etapa. */
+export const STAGE_CONTACTADO = 1;
 export const STAGE_CITA = 2;
 export const STAGE_VISITA = 3;
 export const STAGE_NEGOCIACION = 4;
 export const STAGE_SEPARACION = 5;
+
+/**
+ * Etapas que se ofrecen en el filtro "Etapa" de la barra principal.
+ *
+ * El filtro lee la etapa **actual** del trato —dónde está parado hoy—, no la
+ * más avanzada que alcanzó. Es la lectura que el equipo comercial ya tiene en
+ * la cabeza porque es la del CRM, y en los perdidos dice dónde se cayeron.
+ *
+ * ⚠️ No confundir con los umbrales `STAGE_*` de arriba: los KPIs del embudo
+ * (citas, visitas, separaciones) siguen contando por etapa alcanzada
+ * (`stage >= X`). Filtrar por "Interesado" deja esos KPIs en cero, y eso es
+ * correcto: nadie que siga en Interesado ha llegado a una cita.
+ *
+ * "Firma & Entrega" queda fuera por decisión de Mercadeo — el filtro cubre la
+ * gestión comercial, no la posventa. Consecuencia: un trato ya en firma no
+ * aparece bajo ninguna opción del filtro.
+ */
+export const STAGE_FILTER_IDX = [0, 1, 2, 3, 4, 5];
 
 /**
  * Días máximos que un lead abierto puede pasar sin movimiento antes de contarse
@@ -96,6 +115,42 @@ export const ROTTEN_DAYS: Record<number, Record<number, number> | null> = {
   6: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
   7: { 0: 7, 1: 10, 2: 10, 3: 10, 4: 10, 6: 10 },
 };
+
+/**
+ * Proyectos que cada asesor tiene asignados. Alimenta la alerta de gestión
+ * cruzada del capítulo 04 de Gerencia.
+ *
+ * ⚠️ No existe en Pipedrive — es una asignación comercial, se edita a mano.
+ *
+ * La política es exclusividad dentro de la constructora: los asesores de Inari
+ * no atienden Tinguazul, y al contrario. Una actividad sobre un proyecto que no
+ * está en su lista no es gestión, es un error de operación del CRM —gestión
+ * cargada al usuario equivocado, o una automatización disparando con el token
+ * de otro— y el tablero la **marca sin descontarla**: la cifra tiene que seguir
+ * cuadrando con el CRM mientras el error se corrige.
+ *
+ * La llave se compara contra el **primer nombre** del usuario de Pipedrive,
+ * normalizado (minúsculas, sin tildes). Amarrar la política al nombre completo
+ * la rompería en silencio el día que a alguien le agreguen un apellido o le
+ * corrijan un tilde en el CRM.
+ *
+ * Sólo se auditan los asesores listados aquí. Uno que no aparezca —los de
+ * inmobiliaria, un apoyo comercial, un usuario nuevo— no genera alerta nunca.
+ */
+export const ADVISOR_PROJECTS: Record<string, number[]> = {
+  cristhiam: [0],
+  damariz: [0],
+  oscar: [1, 2],
+};
+
+/**
+ * Proyectos donde la exclusividad se audita.
+ *
+ * Sólo la constructora. Un asesor de Inari que registre gestión en Bodegas u
+ * Oficinas no se marca: la regla que pidió Gerencia es Inari ↔ Tinguazul, y
+ * ampliarla de más llenaría el tablero de alertas que nadie pidió.
+ */
+export const ADVISOR_SCOPE_IDX = CONSTRUCTORA_IDX;
 
 /**
  * Tipos de actividad que cuentan como reunión agendada con el cliente.
@@ -174,7 +229,7 @@ export const BOLSA_LABEL: Record<Bolsa, string> = {
 
 /** Meses con presupuesto cargado, en orden cronológico. */
 export const INVERSION_MESES = [
-  '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07',
+  '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09',
 ];
 
 export interface Rubro {
@@ -219,59 +274,65 @@ export const RUBROS: Rubro[] = [
  */
 export const INVERSION_RUBROS: Record<Bolsa, number[][]> = {
   inari: [
-    /*  0 Publicidad Digital */ [3_000_000, 2_800_000, 200_000, 5_600_000, 3_400_000, 5_500_000, 4_415_348],
-    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0],
-    /*  2 CRM-WhatsApp       */ [0, 85_132, 84_306, 283_615, 0, 0, 76_464],
-    /*  3 Banderas           */ [0, 3_478_370, 606_900, 0, 0, 0, 606_900],
-    /*  4 Valla              */ [0, 0, 890_477, 0, 306_425, 0, 4_998_000],
-    /*  5 Volantes           */ [0, 1_391_110, 119_000, 142_800, 1_582_700, 0, 756_840],
-    /*  6 Brochures          */ [0, 0, 440_300, 0, 0, 0, 0],
-    /*  7 Eventos            */ [0, 0, 1_326_255, 0, 0, 0, 684_250],
-    /*  8 Chat IA            */ [1_900_947, 1_565_253, 1_530_537, 1_494_080, 1_081_909, 902_524, 2_000_000],
-    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 61_600],
-    /* 10 Tour Virtuales     */ [9_508_100, 0, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [272_462, 971_778, 993_849, 0, 2_204_910, 1_000_500, 0],
-    /* 14 PR                 */ [73_800, 0, 0, 0, 300_000, 1_785_000, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [0, 5_800_000, 200_000, 5_600_000, 3_400_000, 5_500_000, 5_404_688, 5_100_000, 21_254_000],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [56_478, 85_133, 84_306, 283_615, 0, 0, 111_580, 0, 0],
+    /*  3 Banderas           */ [0, 3_478_370, 606_900, 0, 0, 0, 606_900, 0, 0],
+    /*  4 Valla              */ [374_078, 0, 890_477, 0, 306_425, 0, 4_998_000, 0, 353_430],
+    /*  5 Volantes           */ [0, 1_391_110, 119_000, 142_800, 1_582_700, 0, 756_840, 0, 0],
+    /*  6 Brochures          */ [0, 0, 4_581_500, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [0, 0, 1_326_255, 0, 0, 0, 684_250, 0, 333_200],
+    /*  8 Chat IA            */ [1_900_947, 1_565_253, 1_530_537, 1_494_080, 6_411_909, 902_524, 2_000_000, 375_000, 7_659_800],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 61_600, 0, 235_618],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [314_262, 971_778, 993_849, 0, 2_204_910, 1_000_500, 0, 3_795_022, 10_000_000],
+    /* 14 PR                 */ [73_800, 0, 0, 0, 300_000, 1_785_000, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
   tng: [
-    /*  0 Publicidad Digital */ [3_000_000, 3_000_000, 3_000_000, 2_987_520, 2_512_480, 3_642_000, 4_000_000],
-    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0],
-    /*  2 CRM-WhatsApp       */ [48_239, 67_947, 77_237, 236_054, 0, 0, 94_501],
-    /*  3 Banderas           */ [0, 0, 0, 1_213_800, 0, 0, 1_213_800],
-    /*  4 Valla              */ [0, 676_872, 0, 0, 0, 0, 0],
-    /*  5 Volantes           */ [0, 198_730, 404_600, 353_351, 2_084_788, 557_289, 351_050],
-    /*  6 Brochures          */ [0, 202_300, 0, 440_300, 0, 0, 0],
-    /*  7 Eventos            */ [0, 1_140_568, 1_198_092, 0, 2_014_200, 0, 684_250],
-    /*  8 Chat IA            */ [989_687, 937_981, 1_033_922, 890_121, 1_264_266, 813_284, 2_000_000],
-    /*  9 Página Web         */ [0, 0, 3_427_388, 3_374_388, 0, 0, 0],
-    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [272_462, 0, 0, 0, 0, 0, 0],
-    /* 14 PR                 */ [0, 0, 0, 0, 0, 0, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [4_760_000, 3_000_000, 3_000_000, 2_987_520, 2_512_480, 3_642_000, 5_041_027, 0, 2_000_000],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [48_239, 67_948, 77_237, 236_054, 0, 0, 94_501, 0, 0],
+    /*  3 Banderas           */ [0, 0, 0, 1_213_800, 0, 0, 1_213_800, 0, 0],
+    /*  4 Valla              */ [60_000, 676_872, 0, 0, 0, 0, 0, 2_499_000, 2_526_370],
+    /*  5 Volantes           */ [0, 198_730, 404_600, 353_352, 2_084_788, 557_289, 351_050, 0, 0],
+    /*  6 Brochures          */ [0, 202_300, 0, 440_300, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [272_462, 1_140_568, 1_198_092, 0, 2_311_700, 0, 684_250, 0, 349_990],
+    /*  8 Chat IA            */ [989_687, 937_981, 1_033_922, 890_121, 6_594_266, 813_284, 2_000_000, 375_000, 3_375_000],
+    /*  9 Página Web         */ [0, 0, 53_000, 3_374_388, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [0, 0, 60_000, 0, 0, 0, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
   // Agregado de Coworking + Depósitos + Op. Terceros + Locales + Oficinas.
+  //
+  // Julio trae un valor **negativo** en Portales Inmobiliarios (−$792.362):
+  // es la reversión contable de cargos de portales que el P&G registra en el
+  // mes. Se carga tal cual viene del P&G — ajustarlo a cero haría que el
+  // dashboard dejara de cuadrar contra el estado de resultados, que es la
+  // única razón por la que esta matriz existe.
   inm: [
-    /*  0 Publicidad Digital */ [870_622, 892_360, 0, 1_015_977, 0, 293_757, 619_947],
-    /*  1 Portales           */ [110_000, 1_332_445, 1_010_470, 0, 1_345_940, 123_495, 0],
-    /*  2 CRM-WhatsApp       */ [7_590, 5_125, 5_070, 0, 0, 14_735, 0],
-    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0],
-    /*  4 Valla              */ [0, 0, 250_000, 1_704_000, 651_750, 1_116_000, 0],
-    /*  5 Volantes           */ [0, 244_986, 870_000, 0, 0, 163_324, 0],
-    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0],
-    /*  7 Eventos            */ [60_000, 0, 0, 0, 0, 0, 0],
-    /*  8 Chat IA            */ [0, 1_117_545, 295_470, 527_890, 281_690, 402_040, 0],
-    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0],
-    /* 10 Tour Virtuales     */ [0, 1_200_000, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0],
-    /* 14 PR                 */ [754_625, 754_625, 377_310, 377_310, 0, 0, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [870_622, 892_360, 0, 1_015_977, 0, 293_757, 2_675_782, 473_603, 500_735],
+    /*  1 Portales           */ [110_000, 1_332_445, 1_010_469, 0, 1_345_940, 123_495, -792_362, 975_379, 1_870_000],
+    /*  2 CRM-WhatsApp       */ [7_588, 5_125, 5_071, 0, 0, 14_733, 24_357, 0, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 250_000, 1_704_000, 651_750, 1_116_000, 86_000, 0, 0],
+    /*  5 Volantes           */ [0, 244_986, 870_000, 0, 0, 163_324, 0, 81_662, 0],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [60_000, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 1_117_543, 295_468, 527_891, 281_689, 402_042, 0, 0, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 1_200_000, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [754_624, 754_624, 377_312, 377_312, 0, 0, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
 };
 
@@ -279,25 +340,378 @@ export const INVERSION_RUBROS: Record<Bolsa, number[][]> = {
 export const DIGITAL_COLOR = '#60a5fa';
 export const NO_DIGITAL_COLOR = '#fb923c';
 
-export interface Goal {
-  leads: number;
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * BUYER PERSONA — campos de perfilamiento del CRM
+ *
+ * Son campos personalizados de Pipedrive que el asesor diligencia a mano en la
+ * sala. Se resuelven **por nombre**, no por hash: los hashes cambian si alguien
+ * recrea el campo, y un hash muerto deja el capítulo en blanco sin avisar. Un
+ * campo que no aparezca en `dealFields` se marca `ausente` y el capítulo lo
+ * dibuja como tarjeta apagada con el nombre que buscó, para que se vea cuál
+ * hay que corregir.
+ *
+ * ⚠️ El sesgo que hay que tener presente al leer todo este capítulo: el asesor
+ * perfila al lead que le interesa. Con índices de diligenciamiento bajos, esto
+ * describe a quien el asesor decidió perfilar, no a quien consulta.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+/** Cómo se dibuja un campo de perfilamiento. */
+export type PerfilViz =
+  /** Pocas categorías sin orden natural → dona. */
+  | 'torta'
+  /** Categorías con orden propio (edad, hijos) → barra vertical en ese orden. */
+  | 'barra'
+  /** Texto libre con cola larga (localidad, profesión) → barra horizontal top-N. */
+  | 'ranking'
+  /** Numérico continuo → histograma sobre `buckets`. */
+  | 'histograma';
+
+/** Eje de lectura del perfil. */
+export type PerfilGrupo = 'demo' | 'psico' | 'econ';
+
+export const PERFIL_GRUPO_LABEL: Record<PerfilGrupo, string> = {
+  demo: 'Demográfico',
+  psico: 'Psicográfico',
+  econ: 'Económico',
+};
+
+export interface PerfilBucket {
+  label: string;
+  /** Límite inferior inclusivo; `null` = sin piso. */
+  min: number | null;
+  /** Límite superior exclusivo; `null` = sin techo. */
+  max: number | null;
+}
+
+export interface PerfilCampo {
+  label: string;
+  /**
+   * Nombres aceptados del campo en Pipedrive. Se comparan normalizados (sin
+   * tildes ni mayúsculas), así que basta con listar las variantes de redacción.
+   * El primero es el que se le muestra a Mercadeo cuando el campo no aparece.
+   */
+  alias: string[];
+  viz: PerfilViz;
+  grupo: PerfilGrupo;
+  /**
+   * Orden canónico de las categorías. Los valores que el CRM traiga fuera de
+   * esta lista se dibujan después, ordenados por frecuencia.
+   */
+  orden?: string[];
+  /** Cuántas categorías muestra un `ranking` antes de agrupar en "Otros". */
+  topN?: number;
+  /** Cortes del histograma, sólo para `viz: 'histograma'`. */
+  buckets?: PerfilBucket[];
+  /**
+   * `true` cuando el 0 significa "sin diligenciar", no "cero".
+   *
+   * Presupuesto y Área exportan 0 por defecto en casi toda la base: contarlos
+   * como diligenciados inflaría la cobertura con miles de ceros que nadie
+   * escribió.
+   */
+  ceroEsVacio?: boolean;
+}
+
+/**
+ * Los 13 campos del capítulo. El orden fija los índices de `Lead.perfil`, así
+ * que insertar uno en la mitad invalida los datos ya servidos: agregar al final.
+ */
+export const PERFIL_CAMPOS: PerfilCampo[] = [
+  { label: 'Género', alias: ['Genero', 'Género'], viz: 'torta', grupo: 'demo', orden: ['Masculino', 'Femenino'] },
+  {
+    label: 'Edad',
+    alias: ['Edad'],
+    viz: 'barra',
+    grupo: 'demo',
+    orden: ['18 a 25', '26 a 35', '36 a 45', '46 a 55', '56 a 65', 'Más de 66'],
+  },
+  {
+    label: 'Interés',
+    alias: ['Interés', 'Interes'],
+    viz: 'torta',
+    grupo: 'psico',
+    orden: ['Habitar', 'Invertir', 'Invertir, Habitar'],
+  },
+  {
+    label: 'Estado civil',
+    alias: ['Estado civil'],
+    viz: 'torta',
+    grupo: 'demo',
+    orden: ['Soltera/o', 'Casada/o', 'Unión Libre', 'Divorciada/o', 'Viuda/o', 'No Informa'],
+  },
+  { label: 'Localidad', alias: ['Localidad'], viz: 'ranking', grupo: 'demo', topN: 12 },
+  { label: 'Profesión', alias: ['Profesión', 'Profesion'], viz: 'ranking', grupo: 'econ', topN: 12 },
+  {
+    label: 'Número de hijos',
+    alias: ['Número de hijos', 'Numero de hijos'],
+    viz: 'barra',
+    grupo: 'demo',
+    orden: ['0', '1', '2', '3', '4'],
+  },
+  {
+    label: 'Mascotas',
+    alias: ['Mascotas'],
+    viz: 'torta',
+    grupo: 'psico',
+    orden: ['Si tiene', 'No tiene', 'No responde'],
+  },
+  {
+    label: 'Número de vehículos',
+    alias: ['Número de vehiculos', 'Numero de vehiculos', 'Número de vehículos'],
+    viz: 'barra',
+    grupo: 'econ',
+    orden: ['0', '1', '2', '3'],
+  },
+  {
+    label: 'Entrega con acabados',
+    alias: ['Entrega con Acabados (Si/No)', 'Entrega con acabados', 'Entrega con Acabados'],
+    viz: 'torta',
+    grupo: 'psico',
+    orden: ['Si', 'No'],
+  },
+  {
+    // No lo pidió Mercadeo en la primera lista, pero es la variable económica
+    // que decide tipología en un producto premium y ya está en el CRM.
+    label: 'Ingresos mensuales',
+    alias: ['Ingresos mensuales'],
+    viz: 'barra',
+    grupo: 'econ',
+    orden: [
+      '1.3 a 3', '3.1 a 5', '5.1 a 7', '7.1 a 10', '10.1 a 13', '13.1 a 15',
+      '15.1 a 18', '18.1 a 20', '20.1 a 25', '25.1 a 30', '30.1 a 40',
+      '40.1 a 50', 'Más 50',
+    ],
+  },
+  {
+    label: 'Presupuesto apartamento',
+    alias: ['Presupuesto Apartamento', 'Presupuesto apartamento'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    buckets: [
+      { label: 'Menos de $500M', min: null, max: 500_000_000 },
+      { label: '$500M a $1.000M', min: 500_000_000, max: 1_000_000_000 },
+      { label: '$1.000M a $1.500M', min: 1_000_000_000, max: 1_500_000_000 },
+      { label: '$1.500M a $2.000M', min: 1_500_000_000, max: 2_000_000_000 },
+      { label: 'Más de $2.000M', min: 2_000_000_000, max: null },
+    ],
+  },
+  {
+    label: 'Área requerida',
+    alias: ['Área Requerida', 'Area Requerida', 'Área requerida'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    buckets: [
+      { label: 'Hasta 50 m²', min: null, max: 51 },
+      { label: '51 a 70 m²', min: 51, max: 71 },
+      { label: '71 a 90 m²', min: 71, max: 91 },
+      { label: '91 a 110 m²', min: 91, max: 111 },
+      { label: 'Más de 110 m²', min: 111, max: null },
+    ],
+  },
+];
+
+/** Índices en `PERFIL_CAMPOS`, para no escribir números mágicos. */
+export const PERFIL_GENERO = 0;
+export const PERFIL_EDAD = 1;
+export const PERFIL_INTERES = 2;
+export const PERFIL_ESTADO_CIVIL = 3;
+export const PERFIL_LOCALIDAD = 4;
+export const PERFIL_PROFESION = 5;
+export const PERFIL_HIJOS = 6;
+export const PERFIL_MASCOTAS = 7;
+export const PERFIL_VEHICULOS = 8;
+export const PERFIL_ACABADOS = 9;
+export const PERFIL_INGRESOS = 10;
+export const PERFIL_PRESUPUESTO = 11;
+export const PERFIL_AREA = 12;
+
+/**
+ * Campos que tienen que estar los cuatro para que el trato cuente como
+ * "núcleo completo".
+ *
+ * Es la muestra sobre la que se puede cruzar dos variables sin inventar: un
+ * trato con género pero sin edad no sirve para decir "hombres de 36 a 45".
+ */
+export const PERFIL_NUCLEO = [PERFIL_GENERO, PERFIL_EDAD, PERFIL_INTERES, PERFIL_LOCALIDAD];
+
+/**
+ * Semáforo de suficiencia sobre el número de tratos con núcleo completo.
+ * Debajo de 1.000 no se llama buyer persona: se llama perfil preliminar.
+ */
+export const PERFIL_UMBRALES = { descriptivo: 400, accionable: 1_000 } as const;
+
+/**
+ * Debajo de este índice de perfilamiento, el perfil describe a quien el asesor
+ * decidió perfilar y no a quien consulta. El capítulo lo dice en pantalla.
+ */
+export const PERFIL_SESGO_PCT = 40;
+
+/** Paleta de las categorías de perfil. 12 tonos, se repite si hacen falta más. */
+export const PERFIL_COLORS = [
+  '#c9a96e', '#6366f1', '#22d3ee', '#f59e0b', '#8b5cf6', '#4ade80',
+  '#f43f5e', '#0ea5e9', '#fb923c', '#a3e635', '#e879f9', '#64748b',
+];
+
+export const SIN_PERFIL = 'Sin diligenciar';
+export const SIN_PERFIL_COLOR = '#9090a8';
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * TASAS DE CONVERSIÓN DE MERCADO
+ *
+ * ⚠️ No salen de Pipedrive ni se calculan: son el **estándar del sector** que
+ * Mercadeo usa como referencia, y se actualizan a mano.
+ *
+ * Son una regla, no una medición. El dashboard las muestra al lado de sus
+ * propias cifras para dar contexto, pero nunca las mezcla con ellas: si alguna
+ * vez estos números terminan alimentando un cálculo, deja de ser una referencia
+ * y se convierte en un dato inventado circulando por el tablero.
+ *
+ * Los cinco pasos calzan uno a uno con las transiciones de `STAGES`:
+ * Interesado → Contactado → Cita Agendada → Visitado → Negociación →
+ * Separación. "Firma & Entrega" queda fuera porque es posventa, igual que en
+ * el filtro de etapa.
+ *
+ * ⚠️ AQUÍ SE GUARDA LA TASA **ETAPA A ETAPA**, QUE ES COMO LA ENTREGA LA FUENTE.
+ * Lo que el tablero **muestra** es el acumulado desde Interesado, que calcula
+ * `tasasDesdeInteresado()`. El acumulado no se guarda: sería el mismo dato dos
+ * veces y terminaría discrepando, igual que habría pasado con los totales de
+ * inversión. Para cambiar lo que se ve en pantalla se edita el paso de abajo,
+ * no el resultado.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+export interface TasaMercado {
+  /** Etapa que se alcanza en este paso, con los nombres de `STAGES`. */
+  etapa: string;
+  /** Versión corta para las tarjetas angostas. */
+  corto: string;
+  /** Tasa etapa a etapa del canal digital (contra la etapa anterior), en %. */
+  digital: number;
+  /** Tasa etapa a etapa del canal no digital (contra la etapa anterior), en %. */
+  noDigital: number;
+  /**
+   * Color propio del paso. Siguen el orden del embudo y están escogidos para
+   * distinguirse entre sí de un vistazo, que es justo para lo que sirven.
+   */
+  color: string;
+}
+
+export const TASAS_MERCADO: TasaMercado[] = [
+  { etapa: 'Contactado', corto: 'Contacto', digital: 67, noDigital: 95, color: '#6366f1' },
+  { etapa: 'Cita agendada', corto: 'Cita', digital: 20, noDigital: 80, color: '#22d3ee' },
+  { etapa: 'Visitado', corto: 'Visita', digital: 55, noDigital: 95, color: '#f59e0b' },
+  { etapa: 'Negociación', corto: 'Negociación', digital: 25, noDigital: 28, color: '#f43f5e' },
+  { etapa: 'Separación', corto: 'Separación', digital: 67, noDigital: 77, color: '#4ade80' },
+];
+
+/**
+ * La misma referencia, leída desde el arranque del embudo: de cada 100
+ * interesados, cuántos llegan a esta etapa.
+ *
+ * Es la lectura que pidió Mercadeo y la que sirve para planear: dice cuántos
+ * leads hay que meter arriba para sacar una separación abajo. La tasa etapa a
+ * etapa no lo dice —un 67% de Negociación a Separación suena bien y esconde
+ * que sólo 1,8 de cada 100 llegaron a negociar.
+ */
+export interface TasaAcumulada extends Omit<TasaMercado, 'digital' | 'noDigital'> {
+  /** % de los interesados que llega a esta etapa, canal digital. */
+  digital: number;
+  /** % de los interesados que llega a esta etapa, canal no digital. */
+  noDigital: number;
+}
+
+export function tasasDesdeInteresado(): TasaAcumulada[] {
+  let dig = 100;
+  let nodig = 100;
+  return TASAS_MERCADO.map((t) => {
+    dig = (dig * t.digital) / 100;
+    nodig = (nodig * t.noDigital) / 100;
+    return { ...t, digital: dig, noDigital: nodig };
+  });
+}
+
+/**
+ * Metas de las etapas intermedias del embudo.
+ *
+ * No se cargan a mano: salen de la meta de leads multiplicada por las tasas de
+ * `tasasDesdeInteresado()`. Por eso viven aparte de `META` —ahí sólo va lo que
+ * Mercadeo teclea— y por eso dependen del canal.
+ */
+export interface MetasEtapa {
+  contactados: number;
   citas: number;
   visitas: number;
+  negociaciones: number;
+  separaciones: number;
+}
+
+/** Metas base que Mercadeo carga a mano. Todo lo demás se deriva de aquí. */
+export interface MetaBase {
+  leads: number;
   cierres: number;
-  /** Tasa de cierre objetivo, en %. */
+}
+
+export interface Goal {
+  leads: number;
+  cierres: number;
+  /** Tasa de cierre objetivo, en %. Derivada: `cierres / leads`. */
   tasa: number;
+  /**
+   * Metas de etapa del canal filtrado. `null` cuando la barra no tiene canal
+   * escogido: cada canal tiene su propia tasa y no hay una sola que aplique.
+   * Promediarlas inventaría un número que no es de nadie.
+   */
+  etapas: MetasEtapa | null;
+  /** Las dos referencias, para mostrarlas lado a lado cuando no hay canal. */
+  porCanal: { digital: MetasEtapa; noDigital: MetasEtapa };
 }
 
 /**
  * Metas mensuales por proyecto.
  * ⚠️ No existe en Pipedrive — se actualiza a mano.
  * La clave es el índice en `PROJECTS`; Tinguazul 1 comparte la meta de 2A.
+ *
+ * Sólo dos números por proyecto: los leads que Mercadeo se compromete a meter
+ * arriba del embudo, y los cierres que Comercial se compromete a sacar abajo.
+ * Citas, visitas, negociaciones y separaciones ya **no** se teclean: son el
+ * resultado de aplicarle a los leads las tasas de mercado, así que no pueden
+ * contradecirlas.
+ *
+ * Los cierres siguen siendo la meta comercial pactada (3/mes) y no el 4,4% que
+ * darían las tasas — decisión de Sebas el 23-sep-2026. Es el único punto donde
+ * la meta se aparta de la fórmula, y es a propósito: subirla a 13 cuadruplica
+ * el compromiso con Gerencia y eso no se cambia desde un archivo de config.
  */
-export const META: Record<number, Goal> = {
-  0: { leads: 314, citas: 66, visitas: 42, cierres: 3, tasa: 0.96 },
-  1: { leads: 296, citas: 82, visitas: 63, cierres: 3, tasa: 1.01 },
-  2: { leads: 296, citas: 82, visitas: 63, cierres: 3, tasa: 1.01 },
+export const META: Record<number, MetaBase> = {
+  0: { leads: 296, cierres: 3 },
+  1: { leads: 296, cierres: 3 },
+  2: { leads: 296, cierres: 3 },
 };
+
+/**
+ * Metas de etapa para una meta de leads y un canal.
+ *
+ * `null` en `digital` significa "sin canal escogido", y entonces no hay metas
+ * de etapa: ver el comentario de `Goal.etapas`.
+ */
+export function metasEtapa(leads: number, digital: boolean): MetasEtapa {
+  const t = tasasDesdeInteresado();
+  const pct = (i: number) => Math.round((leads * (digital ? t[i].digital : t[i].noDigital)) / 100);
+  // Los índices siguen el orden de TASAS_MERCADO: 0 Contactado, 1 Cita,
+  // 2 Visitado, 3 Negociación, 4 Separación.
+  return {
+    contactados: pct(0),
+    citas: pct(1),
+    visitas: pct(2),
+    negociaciones: pct(3),
+    separaciones: pct(4),
+  };
+}
 
 /**
  * Fuentes que cuentan como tráfico digital. Se comparan normalizadas
@@ -424,3 +838,86 @@ export const MONTH_SHORT = [
 
 /** Los charts ignoran datos anteriores a este año. */
 export const MIN_YEAR = '2025';
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * COMERCIAL INM — ficha del cliente de la inmobiliaria
+ *
+ * Los cinco campos de Pipedrive que describen lo que busca un cliente de
+ * Oficinas, Locales, Bodegas, Coworking u Otros Inmuebles. Alimentan el
+ * capítulo 02 de la pestaña **Comercial INM**, que es el panel del asesor.
+ *
+ * Igual que el buyer persona, se resuelven **por nombre** (ver `perfil.ts`):
+ * si alguien recrea un campo en el CRM y cambia el hash, la columna no se queda
+ * en blanco en silencio, se marca ausente. La fuente no va aquí porque ya viaja
+ * en `Lead.source`.
+ *
+ * El orden fija los índices de `Lead.ficha`: agregar siempre al final.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const FICHA_INM_CAMPOS: PerfilCampo[] = [
+  { label: 'Inmueble', alias: ['Inmueble'], viz: 'ranking', grupo: 'econ', topN: 12 },
+  {
+    label: 'Tipo de inmueble',
+    alias: ['Tipo de inmueble', 'Tipo inmueble'],
+    viz: 'torta',
+    grupo: 'econ',
+    orden: ['Oficinas', 'Locales', 'Bodegas', 'Coworking', 'Otros Inmuebles', 'Apartamentos en venta'],
+  },
+  {
+    // En el CRM el campo se llama "Entrega" y trae el estado de entrega
+    // (Obra Gris, Obra Blanca, Adecuado, Amoblado). El Sí/No de acabados se
+    // deriva de aquí con `ACABADOS_SI`, para no pedirle al equipo un campo nuevo.
+    label: 'Entrega',
+    alias: ['Entrega con Acabados (Si/No)', 'Entrega con acabados', 'Entrega'],
+    viz: 'torta',
+    grupo: 'econ',
+    orden: ['Obra Gris', 'Obra Blanca', 'Adecuado', 'Amoblado'],
+  },
+  {
+    label: 'Presupuesto',
+    alias: ['Presupuesto'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    // Conviven cánones de arriendo y precios de venta: los cortes cubren los dos.
+    buckets: [
+      { label: 'Hasta $10M', min: null, max: 10_000_000 },
+      { label: '$10M a $50M', min: 10_000_000, max: 50_000_000 },
+      { label: '$50M a $500M', min: 50_000_000, max: 500_000_000 },
+      { label: '$500M a $2.000M', min: 500_000_000, max: 2_000_000_000 },
+      { label: 'Más de $2.000M', min: 2_000_000_000, max: null },
+    ],
+  },
+  {
+    label: 'Área requerida',
+    alias: ['Área Requerida', 'Area Requerida', 'Área requerida'],
+    viz: 'histograma',
+    grupo: 'econ',
+    ceroEsVacio: true,
+    buckets: [
+      { label: 'Hasta 50 m²', min: null, max: 51 },
+      { label: '51 a 100 m²', min: 51, max: 101 },
+      { label: '101 a 300 m²', min: 101, max: 301 },
+      { label: '301 a 1.000 m²', min: 301, max: 1_001 },
+      { label: 'Más de 1.000 m²', min: 1_001, max: null },
+    ],
+  },
+];
+
+export const FICHA_INMUEBLE = 0;
+export const FICHA_TIPO = 1;
+export const FICHA_ENTREGA = 2;
+export const FICHA_PRESUPUESTO = 3;
+export const FICHA_AREA = 4;
+
+/**
+ * Valores del campo "Entrega" que cuentan como **entrega con acabados**.
+ *
+ * ⚠️ Es una regla comercial, no un dato del CRM: se edita aquí. Obra gris y
+ * obra blanca se leen como "sin acabados"; adecuado y amoblado, como "con
+ * acabados". Cualquier valor nuevo que aparezca en el CRM y no esté en ninguna
+ * de las dos listas se muestra como "Sin dato" hasta que se clasifique.
+ */
+export const ACABADOS_SI = ['Adecuado', 'Amoblado'];
+export const ACABADOS_NO = ['Obra Gris', 'Obra Blanca'];

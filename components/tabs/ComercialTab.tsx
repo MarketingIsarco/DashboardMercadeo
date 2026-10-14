@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { ChartBox } from '@/components/charts/ChartBox';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
@@ -23,10 +24,10 @@ import {
   goalFor,
   isAbierto,
   isCita,
-  isGanado,
   isPerdido,
   isSeparacion,
   isVisita,
+  ventasDelPeriodo,
 } from '@/lib/selectors';
 import type { TabProps } from '@/lib/selectors';
 import type { Lead, LossGroup } from '@/lib/types';
@@ -91,10 +92,61 @@ interface PresentAdvisor {
   color: string;
 }
 
+/**
+ * Capítulo 01 de las pestañas comerciales. Lo comparten **Comercial COIS** y
+ * **Comercial INM** para que los indicadores se calculen igual en las dos: la
+ * única diferencia es el universo de leads que recibe.
+ */
+export function KpisGenerales({
+  filtered,
+  ganados,
+  filters,
+}: Pick<TabProps, 'filtered' | 'ganados' | 'filters'>) {
+  const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
+  return (
+    <Section
+      title="01 · KPIs Generales"
+      sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
+    >
+      <KpiGrid cols={8}>
+        <Kpi size="xs" label="Total Leads" value={k.total.toLocaleString('es-CO')} meta="Activos, perdidos y ganados" />
+        <Kpi size="xs" label="Citas agendadas" value={k.citas} meta={`${pct(k.citas, k.total)}% del total`} />
+        <Kpi size="xs" label="Visitas realizadas" value={k.visitas} meta={`${pct(k.visitas, k.total)}% del total`} />
+        {/* Etapa alcanzada, igual que citas y visitas. */}
+        <Kpi
+          size="xs"
+          label="Negociaciones"
+          value={k.negociaciones}
+          meta={`${pct(k.negociaciones, k.total)}% del total`}
+          sub={`${pct(k.negociaciones, k.visitas)}% de las visitas`}
+        />
+        {/* Venta = trato ganado, por fecha de ganado. Las separaciones no suman. */}
+        <Kpi
+          size="xs"
+          label="Ventas"
+          value={k.ganados}
+          meta={`${pct(k.ganados, k.total)}% del total`}
+          sub={`${pct(k.ganados, k.visitas)}% de las visitas`}
+        />
+        <Kpi size="xs" label="Tasa Lead→Cita" value={`${pct(k.citas, k.total)}%`} meta={`${k.citas} citas de ${k.total} leads`} />
+        <Kpi
+          size="xs"
+          label="Tasa Visita→Sep"
+          value={`${pct(k.separaciones + k.ganados, k.visitas)}%`}
+          meta={`${k.separaciones + k.ganados} cierres de ${k.visitas} visitas`}
+        />
+        <Kpi size="xs" label="Tasa de pérdida" value={`${pct(k.perdidos, k.total)}%`} meta={`${k.perdidos} de ${k.total}`} />
+      </KpiGrid>
+      <TasasMercado digital={filters.digital} />
+    </Section>
+  );
+}
+
 // ── Componente principal ─────────────────────────────────────────────
 
-export function ComercialTab({ filtered, filters, meta }: TabProps) {
-  const k = useMemo(() => computeKpis(filtered), [filtered]);
+export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
+  // Los ganados vienen por fecha de ganado; el resto, por creación.
+  const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
 
   // Sólo asesores con al menos un lead en el filtro actual. Reemplaza el hack
   // `i!==10&&i!==5` del HTML, que excluía índices a mano sobre una lista fija.
@@ -107,30 +159,16 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
           i,
           color: ADVISOR_COLORS[i % ADVISOR_COLORS.length],
         }))
-        .filter((a) => filtered.some((l) => l.advisor === a.i)),
-    [meta.advisors, filtered],
+        // Un asesor que sólo tiene ganados del periodo (de leads más viejos)
+        // también aparece: si no, sus cierres se perderían de la tabla.
+        .filter((a) => filtered.some((l) => l.advisor === a.i) || ganados.some((l) => l.advisor === a.i)),
+    [meta.advisors, filtered, ganados],
   );
 
   return (
     <>
       {/* 01 · KPIs Generales */}
-      <Section
-        title="01 · KPIs Generales"
-        sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
-      >
-        <KpiGrid>
-          <Kpi label="Total Leads" value={k.total.toLocaleString('es-CO')} meta="Incluye activos, perdidos y ganados" />
-          <Kpi label="Citas agendadas" value={k.citas} meta={`${pct(k.citas, k.total)}% del total`} />
-          <Kpi label="Visitas realizadas" value={k.visitas} meta={`${pct(k.visitas, k.total)}% del total`} />
-          <Kpi label="Tasa Lead→Cita" value={`${pct(k.citas, k.total)}%`} meta={`${k.citas} citas de ${k.total} leads`} />
-          <Kpi
-            label="Tasa Visita→Sep"
-            value={`${pct(k.separaciones + k.ganados, k.visitas)}%`}
-            meta={`${k.separaciones + k.ganados} cierres de ${k.visitas} visitas`}
-          />
-          <Kpi label="Tasa de pérdida" value={`${pct(k.perdidos, k.total)}%`} meta={`${k.perdidos} perdidos de ${k.total}`} />
-        </KpiGrid>
-      </Section>
+      <KpisGenerales filtered={filtered} ganados={ganados} filters={filters} />
 
       {/* 02 · Gestión Comercial */}
       <Section title="02 · Gestión Comercial" sub="Actividad y eficiencia del equipo comercial">
@@ -138,7 +176,7 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Leads por Asesor</h3>
             <p className="mb-2 text-2xs text-muted">Leads · Contactados · Citas · Visitas · Cierres</p>
-            <LeadsPorAsesor leads={filtered} advisors={advisors} />
+            <LeadsPorAsesor leads={filtered} ganados={ganados} advisors={advisors} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Cumplimiento de Visitas</h3>
@@ -159,7 +197,7 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
         <div className="mt-5">
           <h3 className="mb-2 text-xs font-semibold text-dim">Tabla de Conversión por Asesor</h3>
           <p className="mb-2 text-2xs text-muted">Métricas de gestión y eficiencia individual</p>
-          <TablaAsesor leads={filtered} advisors={advisors} />
+          <TablaAsesor leads={filtered} ganados={ganados} advisors={advisors} />
         </div>
       </Section>
 
@@ -190,7 +228,7 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Pérdida vs Ganados por Asesor</h3>
             <p className="mb-2 text-2xs text-muted">% de leads perdidos y ganados/sep sobre total gestionado</p>
-            <PerdidaVsGanados leads={filtered} advisors={advisors} />
+            <PerdidaVsGanados leads={filtered} ganados={ganados} advisors={advisors} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Razones de Pérdida Generales</h3>
@@ -220,7 +258,14 @@ export function ComercialTab({ filtered, filters, meta }: TabProps) {
 
 // ── 02 · Gestión ─────────────────────────────────────────────────────
 
-function LeadsPorAsesor({ leads, advisors }: { leads: Lead[]; advisors: PresentAdvisor[] }) {
+interface AsesoresProps {
+  leads: Lead[];
+  /** Ganados del periodo por fecha de ganado. */
+  ganados: Lead[];
+  advisors: PresentAdvisor[];
+}
+
+function LeadsPorAsesor({ leads, ganados, advisors }: AsesoresProps) {
   const rows = advisors.map((a) => {
     const af = leads.filter((l) => l.advisor === a.i);
     return {
@@ -229,7 +274,7 @@ function LeadsPorAsesor({ leads, advisors }: { leads: Lead[]; advisors: PresentA
       c: af.filter(isCita).length,
       v: af.filter(isVisita).length,
       // Sep+Cierres: separaciones + ganados formales, como sumaba el HTML.
-      g: af.filter(isSeparacion).length + af.filter(isGanado).length,
+      g: af.filter(isSeparacion).length + ganados.filter((l) => l.advisor === a.i).length,
     };
   });
 
@@ -285,8 +330,10 @@ function Cumplimiento({
   // distintos presentes (supuesto: la meta se repite igual cada mes).
   const goal = goalFor(filters);
   const months = new Set(leads.map((l) => l.month)).size || 1;
-  const metaCitas = goal ? goal.citas * months : null;
-  const metaVisitas = goal ? goal.visitas * months : null;
+  // Las metas de etapa dependen del canal filtrado. Sin canal escogido no hay
+  // una sola meta que aplique, así que esta banda de cumplimiento no se pinta.
+  const metaCitas = goal?.etapas ? goal.etapas.citas * months : null;
+  const metaVisitas = goal?.etapas ? goal.etapas.visitas * months : null;
 
   return (
     <>
@@ -370,14 +417,14 @@ function WeeklyStage({ leads }: { leads: Lead[] }) {
   );
 }
 
-function TablaAsesor({ leads, advisors }: { leads: Lead[]; advisors: PresentAdvisor[] }) {
+function TablaAsesor({ leads, ganados, advisors }: AsesoresProps) {
   const rows = advisors.map((a) => {
     const af = leads.filter((l) => l.advisor === a.i);
     const total = af.length;
     const citas = af.filter(isCita).length;
     const vis = af.filter(isVisita).length;
     const sep = af.filter(isSeparacion).length;
-    const gan = af.filter(isGanado).length;
+    const gan = ganados.filter((l) => l.advisor === a.i).length;
     const per = af.filter(isPerdido).length;
     return {
       name: a.short,
@@ -562,12 +609,12 @@ function AgingTable({ leads, advisors }: { leads: Lead[]; advisors: PresentAdvis
 
 // ── 04 · Perdidos ────────────────────────────────────────────────────
 
-function PerdidaVsGanados({ leads, advisors }: { leads: Lead[]; advisors: PresentAdvisor[] }) {
+function PerdidaVsGanados({ leads, ganados, advisors }: AsesoresProps) {
   const rows = advisors
     .map((a) => {
       const af = leads.filter((l) => l.advisor === a.i);
       const lost = af.filter(isPerdido).length;
-      const won = af.filter((l) => isSeparacion(l) || isGanado(l)).length;
+      const won = ventasDelPeriodo(af, ganados.filter((l) => l.advisor === a.i)).length;
       return {
         name: a.short,
         n: af.length,

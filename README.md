@@ -22,7 +22,9 @@ npm run dev                  # http://localhost:3000
 | `PIPEDRIVE_API_TOKEN` | sí | Token de la API de Pipedrive. Da lectura a **todo** el CRM. |
 | `DASHBOARD_PASSWORD` | sí | Contraseña única de acceso al dashboard. |
 | `DASHBOARD_SECRET` | sí | Clave para firmar la cookie de sesión. Genera una nueva por entorno. |
-| `DASHBOARD_CACHE_TTL_MS` | no | Vida de la caché en ms. Por defecto 900000 (15 min). |
+| `DASHBOARD_CACHE_TTL_MS` | no | Vida de la caché en ms. Por defecto 3600000 (1 hora). |
+| `DASHBOARD_MIN_REFRESH_MS` | no | Antigüedad mínima para que "↻ Actualizar" vaya a Pipedrive. Por defecto 300000 (5 min). |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | en producción | Upstash Redis (caché compartida entre instancias). También acepta `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`. |
 | `PD_FIELD_FUENTE` | no | Sobreescribe la clave del campo "Fuente". |
 | `PD_FIELD_CAMPANA` | no | Sobreescribe la clave del campo "Campaña". |
 | `PD_FIELD_CONTENIDO` | no | Sobreescribe la clave del campo "Contenido". |
@@ -57,18 +59,21 @@ app/api/auth           Login (POST) y logout (DELETE). Cookie HMAC-SHA256, 12 h.
 app/api/data           Devuelve el payload del dashboard. ?refresh=1 fuerza recarga.
 lib/pipedrive/client   Llamadas crudas a Pipedrive (deals, stages, pipelines, campos)
 lib/pipedrive/mapping  Deal de Pipedrive → Lead del dashboard
-lib/pipedrive/cache    Caché en memoria + deduplicación de peticiones concurrentes
+lib/pipedrive/cache    Caché compartida en Redis + memoria, con lock entre instancias
 lib/config/negocio.ts  TODO lo que no vive en Pipedrive (inversión, metas, rotting, colores)
 lib/inversion.ts       Derivaciones sobre el presupuesto: bolsas y meses activos, Digital/No-Digital
 lib/selectors.ts       Filtros y métricas derivadas
 lib/gestion.ts         Estado del pipeline abierto: actividad agendada y rotting
-components/tabs/*      Las 5 pestañas
+components/tabs/*      Las pestañas
 ```
 
-Traer los ~6.500 deals son ~13 peticiones paginadas (≈6 s). La caché las guarda
-15 minutos; el botón **↻ Actualizar** fuerza una recarga. Si Pipedrive falla pero
-hay datos viejos en memoria, se sirven marcados como "datos en caché" — un
-dashboard desactualizado es más útil que un error.
+Un barrido completo de Pipedrive son ~75 peticiones paginadas (deals + actividades).
+El resultado se guarda en Upstash Redis durante **1 hora** y lo comparten todas las
+instancias de Vercel, así que recargar el dashboard no consume API. Un lock en Redis
+evita que dos instancias barran a la vez. El botón **↻ Actualizar** sólo va a
+Pipedrive si los datos tienen más de 5 minutos. Si Pipedrive falla pero hay datos
+viejos, se sirven marcados como "datos en caché" — un dashboard desactualizado es
+más útil que un error. Sin Redis (desarrollo local) la caché es sólo en memoria.
 
 ## Cómo se mapea Pipedrive
 
@@ -131,7 +136,8 @@ motivos de pérdida y la paleta.
 |---|---|
 | Resultados | KPIs, embudo, análisis de ventas, tendencias, detalle de ventas |
 | Mercadeo | Pipeline, análisis por fuente, motivos de pérdida, inversión en mercadeo (Digital vs No-Digital + desglose por rubro) |
-| Comercial | Gestión en tiempo real, gestión por asesor, antigüedad de leads, negocios perdidos |
+| Comercial COIS | Gestión en tiempo real, gestión por asesor, antigüedad de leads, negocios perdidos |
+| Comercial INM | Indicadores de la inmobiliaria y panel del asesor: filtro de embudo y asesor, etapa, inmueble, tipo, acabados, presupuesto, área y fuente por cliente |
 | Comparativo | Mes A vs. mes B, con controles propios |
 | Gerencia | Pulso del negocio, alertas de gestión por asesor, velocidad del funnel, primer contacto, mapa de calor de reuniones |
 

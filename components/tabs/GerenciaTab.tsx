@@ -6,11 +6,16 @@ import { ChartBox } from '@/components/charts/ChartBox';
 import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { MonthSelect } from '@/components/ui/MonthSelect';
+import { Popover } from '@/components/ui/Popover';
 import { Section } from '@/components/ui/Section';
+import { Segmented } from '@/components/ui/Segmented';
 import { MONTH_SHORT, PROJECTS, PROJECT_COLORS, STAGES } from '@/lib/config/negocio';
+import { crucesDeGestion, totalCruces } from '@/lib/cruces';
+import type { CruceAsesor } from '@/lib/cruces';
 import { firstName, fmtHoras, median, monthLabel, pct } from '@/lib/format';
 import {
   accionesPorAsesor,
@@ -22,9 +27,10 @@ import {
   todayISO,
 } from '@/lib/gestion';
 import type { ActivityState, SerieAsesor } from '@/lib/gestion';
-import { applyFilters, isAbierto, isPerdido, isVenta } from '@/lib/selectors';
+import { applyFilters, isAbierto, isPerdido, mesGanado } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
-import type { DashboardData, Lead, Meeting, Meta } from '@/lib/types';
+import { STATUS_LOST, STATUS_WON } from '@/lib/types';
+import type { ActivityDay, DashboardData, Lead, Meeting, Meta } from '@/lib/types';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -62,7 +68,7 @@ function lastMonths(today: string, n: number): string[] {
   return out;
 }
 
-export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
+export function GerenciaTab({ data, filtered, ganados, filters, meta }: TabProps) {
   // `today` se congela por render: si se recalculara dentro de cada tabla, dos
   // filas podrían quedar comparadas contra días distintos al cruzar medianoche.
   const today = useMemo(() => todayISO(), []);
@@ -75,12 +81,13 @@ export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
         title="01 · Pulso del Negocio"
         sub={`Corte al ${today} · ${open.length.toLocaleString('es-CO')} leads abiertos en el filtro actual`}
       >
-        <Pulso leads={filtered} open={open} today={today} />
+        <Pulso leads={filtered} ganados={ganados} open={open} today={today} />
+        <TasasMercado digital={filters.digital} />
         <div className="mt-6 grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Tendencia Leads vs Cierres (últimos 6 meses)</h3>
             <p className="mb-2 text-2xs text-muted">Volumen mensual y efectividad comercial</p>
-            <Tendencia leads={filtered} today={today} />
+            <Tendencia leads={filtered} ganados={ganados} today={today} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Mix de Proyectos — Pipeline Activo</h3>
@@ -148,10 +155,21 @@ export function GerenciaTab({ data, filtered, filters, meta }: TabProps) {
 // ─────────────────────────────────────────────────────────────────────
 // 01 · Pulso del Negocio
 // ─────────────────────────────────────────────────────────────────────
-function Pulso({ leads, open, today }: { leads: Lead[]; open: Lead[]; today: string }) {
+function Pulso({
+  leads,
+  ganados,
+  open,
+  today,
+}: {
+  leads: Lead[];
+  ganados: Lead[];
+  open: Lead[];
+  today: string;
+}) {
   const curM = today.slice(0, 7);
   const delMes = leads.filter((l) => l.month === curM);
-  const cierres = delMes.filter(isVenta).length;
+  // Ventas = tratos ganados en el mes, por fecha de ganado. Sin separaciones.
+  const cierres = ganados.filter((l) => mesGanado(l) === curM).length;
 
   const states = open.map((l) => activityState(l, today));
   const vencidos = states.filter((s) => s === 'vencida').length;
@@ -160,7 +178,7 @@ function Pulso({ leads, open, today }: { leads: Lead[]; open: Lead[]; today: str
   return (
     <KpiGrid cols={5}>
       <Kpi label="Leads este mes" value={delMes.length.toLocaleString('es-CO')} meta={`Acumulado ${monthLabel(curM)}`} />
-      <Kpi label="Cierres este mes" value={cierres} meta="Separación + Ganados" />
+      <Kpi label="Ventas este mes" value={cierres} meta="Tratos ganados" />
       <Kpi
         label="Tasa de cierre"
         value={`${pct(cierres, delMes.length)}%`}
@@ -177,7 +195,7 @@ function Pulso({ leads, open, today }: { leads: Lead[]; open: Lead[]; today: str
   );
 }
 
-function Tendencia({ leads, today }: { leads: Lead[]; today: string }) {
+function Tendencia({ leads, ganados, today }: { leads: Lead[]; ganados: Lead[]; today: string }) {
   const months = useMemo(() => lastMonths(today, 6), [today]);
   const labels = months.map((m) => {
     const [y, mo] = m.split('-');
@@ -185,7 +203,7 @@ function Tendencia({ leads, today }: { leads: Lead[]; today: string }) {
   });
 
   const leadsPorMes = months.map((m) => leads.filter((l) => l.month === m).length);
-  const cierresPorMes = months.map((m) => leads.filter((l) => l.month === m && isVenta(l)).length);
+  const cierresPorMes = months.map((m) => ganados.filter((l) => mesGanado(l) === m).length);
 
   const data: MixedData = {
     labels,
@@ -201,7 +219,7 @@ function Tendencia({ leads, today }: { leads: Lead[]; today: string }) {
       },
       {
         type: 'line',
-        label: 'Cierres',
+        label: 'Ventas',
         data: cierresPorMes,
         borderColor: '#c9a96e',
         backgroundColor: '#c9a96e',
@@ -684,6 +702,10 @@ function PrimerContacto({
       <div className="mt-7 border-t border-border pt-5">
         <TablaAsesores rows={rows} global={global} acciones={acciones} advisors={advisors} />
       </div>
+
+      <div className="mt-7 border-t border-border pt-5">
+        <ContactoTardio leads={leads} advisors={advisors} />
+      </div>
     </Section>
   );
 }
@@ -838,7 +860,7 @@ function AccionesDiarias({
 // propio selector), esta tabla **sí respeta los filtros de tiempo del menú
 // principal**, y los aplica a la fecha en que se creó la actividad, no a la del
 // lead: "julio" aquí es lo que el equipo gestionó en julio, aunque el trato
-// haya entrado en marzo. Los demás filtros (proyecto, unidad, fuente, campaña,
+// haya entrado en marzo. Los demás filtros (proyecto, etapa, fuente, campaña,
 // estado) sí son propiedades del trato y se resuelven cruzando por `dealId`.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -868,6 +890,14 @@ interface ResumenAcciones {
   porAsesor: Map<number, number>;
   total: number;
   periodo: PeriodoAcciones;
+  /**
+   * Índice de asesor → gestión sobre proyectos que no le corresponden.
+   *
+   * Sale del mismo recorrido filtrado que `porAsesor`, así que siempre es un
+   * subconjunto de él: lo que la alerta señala está dentro del número que
+   * acompaña, nunca por fuera.
+   */
+  cruces: Map<number, CruceAsesor>;
 }
 
 /**
@@ -903,8 +933,14 @@ function resumenAcciones(
   today: string,
 ): ResumenAcciones {
   // El trato decide si la actividad entra al filtro; a quién se le acredita ya
-  // viene resuelto desde el servidor en `a.advisor` (el usuario asignado).
-  const tratosPermitidos = new Set(tratosSinFiltroDeTiempo(data, filters, meta).map((l) => l.id));
+  // viene resuelto desde el servidor en `a.advisor` (quien CREÓ la actividad).
+  //
+  // Se guarda el trato completo, no sólo su id: la alerta de gestión cruzada
+  // necesita su proyecto y el nombre del contacto, y volver a recorrer los
+  // leads para eso abriría la puerta a que los dos universos se separen.
+  const tratosPermitidos = new Map<number, Lead>(
+    tratosSinFiltroDeTiempo(data, filters, meta).map((l) => [l.id, l]),
+  );
 
   const mesPermitido = (mes: string) => {
     if (filters.year !== null && mes.slice(0, 4) !== filters.year) return false;
@@ -914,6 +950,7 @@ function resumenAcciones(
   };
 
   const porAsesor = new Map<number, number>();
+  const filtradas: ActivityDay[] = [];
   let total = 0;
   let primera: string | null = null;
   let ultima: string | null = null;
@@ -927,6 +964,7 @@ function resumenAcciones(
     if (primera === null || a.date < primera) primera = a.date;
     if (ultima === null || a.date > ultima) ultima = a.date;
     porAsesor.set(a.advisor, (porAsesor.get(a.advisor) ?? 0) + a.count);
+    filtradas.push(a);
     total += a.count;
   }
 
@@ -945,7 +983,12 @@ function resumenAcciones(
     }
   }
 
-  return { porAsesor, total, periodo: { desde, hasta, dias } };
+  return {
+    porAsesor,
+    total,
+    periodo: { desde, hasta, dias },
+    cruces: crucesDeGestion(filtradas, tratosPermitidos, meta.advisors),
+  };
 }
 
 /** `2026-08-03` → `'3 Ago 26'`. */
@@ -964,7 +1007,12 @@ function TablaAsesores({
   acciones: ResumenAcciones;
   advisors: string[];
 }) {
-  const { periodo } = acciones;
+  const { periodo, cruces } = acciones;
+
+  /** Asesor cuyo detalle de cruces está abierto; `null` = ninguno. */
+  const [detalle, setDetalle] = useState<number | null>(null);
+  const cruzadas = totalCruces(cruces);
+  const abierto = detalle === null ? undefined : cruces.get(detalle);
 
   // Quien registró gestión pero no tiene leads propios en el filtro —un apoyo
   // comercial, alguien que cubrió vacaciones— también necesita fila: si no, sus
@@ -999,8 +1047,13 @@ function TablaAsesores({
           </>
         ) : (
           'en el filtro actual'
-        )}
+        )}{' '}
+        · <IconoCruce /> marca gestión sobre un proyecto que no le corresponde al asesor
       </p>
+
+      {cruzadas > 0 ? (
+        <BannerCruces total={cruzadas} cruces={cruces} />
+      ) : null}
 
       <DataTable
         rows={conTotal}
@@ -1008,9 +1061,21 @@ function TablaAsesores({
         columns={[
           {
             header: 'Asesor',
-            cell: (r) => (
-              <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>
-            ),
+            cell: (r) => {
+              const cruce = esTotal(r) ? undefined : cruces.get(r.idx);
+              return (
+                <span className="flex items-center gap-1.5">
+                  <span className={esTotal(r) ? 'font-bold' : 'font-semibold'}>{r.advisor}</span>
+                  {cruce ? (
+                    <BotonCruce
+                      cruce={cruce}
+                      abierto={detalle === r.idx}
+                      onToggle={() => setDetalle(detalle === r.idx ? null : r.idx)}
+                    />
+                  ) : null}
+                </span>
+              );
+            },
           },
           ...BANDAS_VELOCIDAD.map((b, i) => ({
             header: b.corto,
@@ -1032,6 +1097,339 @@ function TablaAsesores({
             align: 'right',
             cell: (r) => num(actividades(r)),
           },
+        ]}
+      />
+
+      {abierto ? <DetalleCruce cruce={abierto} onCerrar={() => setDetalle(null)} /> : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 04 · Tratos atendidos en más de 24 h
+//
+// El detalle nominal de la columna "> 24 h" del resumen: mismo universo
+// (`leads` filtrados), mismo corte (`h > 24`, el último de
+// `CORTES_VELOCIDAD_H`) y misma atribución (`firstContactBy`, quien CREÓ la
+// primera actividad). Así la suma de la tabla cuadra siempre con esa columna.
+//
+// Los tratos sin ninguna actividad no entran: no tienen tiempo de atención que
+// medir, y tampoco están en la columna del resumen.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Umbral de la tabla: el inicio de la última banda de velocidad. */
+const UMBRAL_TARDIO_H = CORTES_VELOCIDAD_H[CORTES_VELOCIDAD_H.length - 1];
+
+const ROJO_TARDIO = BANDAS_VELOCIDAD[BANDAS_VELOCIDAD.length - 1].texto;
+
+type FiltroEstado = 'todos' | 'abiertos';
+
+function estadoTrato(l: Lead): { label: string; color: string } {
+  if (l.status === STATUS_WON) return { label: 'Ganado', color: '#16a34a' };
+  if (l.status === STATUS_LOST) return { label: 'Perdido', color: '#94a3b8' };
+  return { label: 'Abierto', color: '#0e6680' };
+}
+
+function ContactoTardio({ leads, advisors }: { leads: Lead[]; advisors: string[] }) {
+  const [estado, setEstado] = useState<FiltroEstado>('todos');
+  /** Índice del asesor que atendió; `null` = todos. */
+  const [asesor, setAsesor] = useState<number | null>(null);
+
+  const tardios = useMemo(
+    () =>
+      leads
+        .filter(
+          (l) =>
+            l.firstContactHours !== null &&
+            l.firstContactBy >= 0 &&
+            l.firstContactHours > UMBRAL_TARDIO_H,
+        )
+        .sort((a, b) => b.firstContactHours! - a.firstContactHours!),
+    [leads],
+  );
+
+  // Asesores con al menos un trato tardío, del que más tiene al que menos.
+  const opciones = useMemo(() => {
+    const n = new Map<number, number>();
+    for (const l of tardios) n.set(l.firstContactBy, (n.get(l.firstContactBy) ?? 0) + 1);
+    return [...n.entries()].sort((a, b) => b[1] - a[1]);
+  }, [tardios]);
+
+  // Si el filtro global saca al asesor elegido, se vuelve a "todos".
+  const asesorActivo = asesor !== null && opciones.some(([i]) => i === asesor) ? asesor : null;
+
+  const visibles = tardios.filter(
+    (l) =>
+      (asesorActivo === null || l.firstContactBy === asesorActivo) &&
+      (estado === 'todos' || isAbierto(l)),
+  );
+  const abiertos = tardios.filter(isAbierto).length;
+
+  const nombre = (i: number) => firstName(advisors[i] ?? `#${i}`);
+  const num = (v: number) => v.toLocaleString('es-CO');
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-xs font-semibold text-dim">
+            Tratos atendidos en más de {UMBRAL_TARDIO_H} h
+          </h3>
+          <p className="text-2xs text-muted">
+            <b style={{ color: ROJO_TARDIO }}>{num(tardios.length)} tratos</b> recibieron su primera
+            actividad más de {UMBRAL_TARDIO_H} h después de entrar al CRM ({num(abiertos)} siguen
+            abiertos) · es el detalle de la columna &gt; {UMBRAL_TARDIO_H} h del resumen, acreditado a
+            quien <b>creó</b> esa primera actividad · del más lento al más rápido
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Popover
+            label={asesorActivo === null ? 'Todos los asesores' : nombre(asesorActivo)}
+            active={asesorActivo !== null}
+            align="right"
+            width={220}
+          >
+            {(close) => (
+              <div className="max-h-64 overflow-y-auto" aria-label="Asesor que atendió">
+                {[[null, tardios.length] as [number | null, number], ...opciones].map(([i, n]) => {
+                  const selected = i === asesorActivo;
+                  return (
+                    <button
+                      key={String(i)}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setAsesor(i);
+                        close();
+                      }}
+                      className={`flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[11px] transition-colors ${
+                        selected ? 'bg-accent-soft font-semibold text-accent' : 'text-dim hover:bg-accent-soft'
+                      }`}
+                    >
+                      <span>{i === null ? 'Todos los asesores' : nombre(i)}</span>
+                      <span className="text-muted">{num(n)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Popover>
+          <Segmented<FiltroEstado>
+            label="Estado del trato"
+            value={estado}
+            onChange={setEstado}
+            segments={[
+              { value: 'todos', label: 'Todos' },
+              { value: 'abiertos', label: 'Abiertos' },
+            ]}
+          />
+        </div>
+      </div>
+
+      <DataTable
+        rows={visibles}
+        maxHeight={380}
+        empty={`Ningún trato tardó más de ${UMBRAL_TARDIO_H} h en recibir su primera actividad en el filtro actual.`}
+        columns={[
+          { header: 'Atendió', cell: (l) => <span className="font-semibold">{nombre(l.firstContactBy)}</span> },
+          { header: 'Cliente', cell: (l) => <span className="font-semibold">{l.name || '—'}</span> },
+          {
+            header: 'Proyecto',
+            cell: (l) => (
+              <span style={{ color: PROJECT_COLORS[l.project] ?? undefined }}>
+                {PROJECTS[l.project] ?? `#${l.project}`}
+              </span>
+            ),
+          },
+          {
+            header: 'Dueño',
+            cell: (l) =>
+              l.advisor === l.firstContactBy ? (
+                <span className="text-muted">El mismo</span>
+              ) : (
+                nombre(l.advisor)
+              ),
+          },
+          { header: 'ID Pipedrive', align: 'right', cell: (l) => <span className="text-muted">{l.id}</span> },
+          { header: 'Entrada', align: 'right', cell: (l) => fechaCorta(l.date) },
+          {
+            header: 'Primer contacto',
+            align: 'right',
+            cell: (l) => <b style={{ color: ROJO_TARDIO }}>{fmtHoras(l.firstContactHours!)}</b>,
+          },
+          { header: 'Etapa', cell: (l) => STAGES[l.stage] ?? '—' },
+          {
+            header: 'Estado',
+            cell: (l) => {
+              const e = estadoTrato(l);
+              return <span style={{ color: e.color }} className="font-semibold">{e.label}</span>;
+            },
+          },
+        ]}
+      />
+      {visibles.length ? (
+        <p className="mt-2 text-2xs text-muted">
+          Mostrando {num(visibles.length)} de {num(tardios.length)} tratos
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Alerta de gestión cruzada
+//
+// La política vive en `ADVISOR_PROJECTS` (negocio.ts) y la detección en
+// `lib/cruces.ts`. Aquí sólo se pinta.
+//
+// La alerta **no descuenta**: el conteo del asesor sigue siendo el que ve en
+// Pipedrive. Si el tablero restara por su cuenta, el día que alguien compare
+// las dos cifras la que quedaría en duda es la del tablero.
+// ─────────────────────────────────────────────────────────────────────
+
+const CRUCE_COLOR = '#f59e0b';
+
+/** Triángulo de exclamación. Hereda el color del texto que lo contiene. */
+function IconoCruce({ size = 12 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      aria-hidden
+      style={{ display: 'inline-block', verticalAlign: '-1px', color: CRUCE_COLOR }}
+    >
+      <path
+        d="M8 1.6 15 14H1L8 1.6Z"
+        fill="currentColor"
+        fillOpacity="0.18"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M8 6v3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="11.7" r="0.85" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Lista de proyectos en texto: `[1, 2]` → `'Tinguazul 2A y Tinguazul 1'`. */
+function listaProyectos(idx: number[]): string {
+  const nombres = idx.map((i) => PROJECTS[i] ?? `#${i}`);
+  if (nombres.length <= 1) return nombres[0] ?? '—';
+  return `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+}
+
+/** Frase de una línea que explica el cruce de un asesor. */
+function fraseCruce(c: CruceAsesor): string {
+  return `${c.nombre} registró ${c.count.toLocaleString('es-CO')} ${
+    c.count === 1 ? 'actividad' : 'actividades'
+  } en ${listaProyectos(c.ajenos)}, y su asignación es ${listaProyectos(c.permitidos)}`;
+}
+
+/** Resumen del periodo, antes de la tabla. Da el tamaño del problema. */
+function BannerCruces({ total, cruces }: { total: number; cruces: Map<number, CruceAsesor> }) {
+  const nombres = [...cruces.values()].sort((a, b) => b.count - a.count);
+
+  return (
+    <div
+      className="mb-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-2xs"
+      style={{ borderColor: `${CRUCE_COLOR}55`, background: `${CRUCE_COLOR}12` }}
+      role="status"
+    >
+      <span className="mt-px">
+        <IconoCruce size={13} />
+      </span>
+      <span className="text-dim">
+        <b>
+          {total.toLocaleString('es-CO')} {total === 1 ? 'actividad' : 'actividades'} del periodo
+        </b>{' '}
+        {total === 1 ? 'quedó' : 'quedaron'} registradas sobre un proyecto que no corresponde al
+        asesor ({nombres.map((c) => `${c.nombre}: ${c.count.toLocaleString('es-CO')}`).join(' · ')}).
+        Siguen sumando en la tabla — el conteo tiene que seguir cuadrando con Pipedrive. Abre el{' '}
+        <IconoCruce /> de cada asesor para ver los tratos y corregirlos en el CRM.
+      </span>
+    </div>
+  );
+}
+
+function BotonCruce({
+  cruce,
+  abierto,
+  onToggle,
+}: {
+  cruce: CruceAsesor;
+  abierto: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={abierto}
+      title={`${fraseCruce(cruce)}. Click para ver el detalle.`}
+      className="flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors hover:bg-accent-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+      style={abierto ? { background: `${CRUCE_COLOR}22` } : undefined}
+    >
+      <IconoCruce />
+      <span className="text-2xs font-bold" style={{ color: CRUCE_COLOR }}>
+        {cruce.count.toLocaleString('es-CO')}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Los tratos ajenos de un asesor, uno por fila.
+ *
+ * Se agrupa por trato y no por día a propósito: lo que se hace con esto es
+ * abrir el trato en Pipedrive y reasignar la gestión, y para eso importa el
+ * trato, no cada uno de los días en que se tocó.
+ */
+function DetalleCruce({ cruce, onCerrar }: { cruce: CruceAsesor; onCerrar: () => void }) {
+  return (
+    <div
+      className="mt-3 rounded-xl border p-3"
+      style={{ borderColor: `${CRUCE_COLOR}55`, background: `${CRUCE_COLOR}0d` }}
+    >
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <p className="text-2xs text-dim">
+          <IconoCruce /> <b>{fraseCruce(cruce)}</b> · {cruce.tratos.length}{' '}
+          {cruce.tratos.length === 1 ? 'trato' : 'tratos'} por revisar en el CRM
+        </p>
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="shrink-0 text-2xs font-semibold text-muted hover:text-accent"
+        >
+          Cerrar
+        </button>
+      </div>
+
+      <DataTable
+        rows={cruce.tratos}
+        maxHeight={260}
+        empty="Sin tratos cruzados."
+        columns={[
+          {
+            header: 'Proyecto',
+            cell: (t) => (
+              <span
+                className="font-semibold"
+                style={{ color: PROJECT_COLORS[t.project] ?? CRUCE_COLOR }}
+              >
+                {PROJECTS[t.project] ?? `#${t.project}`}
+              </span>
+            ),
+          },
+          { header: 'Trato', cell: (t) => <span className="font-semibold">{t.name}</span> },
+          { header: 'ID Pipedrive', align: 'right', cell: (t) => <span className="text-muted">{t.dealId}</span> },
+          {
+            header: 'Actividades',
+            align: 'right',
+            cell: (t) => <b style={{ color: CRUCE_COLOR }}>{t.count.toLocaleString('es-CO')}</b>,
+          },
+          { header: 'Última gestión', align: 'right', cell: (t) => fechaCorta(t.ultima) },
         ]}
       />
     </div>
@@ -1142,7 +1540,7 @@ const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
  * Los filtros de tiempo se aplican a la fecha de la **reunión**, no a la del
  * lead: "julio" aquí significa lo que se agendó en julio, aunque el lead haya
  * entrado en marzo — de otro modo el mapa mostraría la agenda de una cohorte y
- * no la de un mes. Los demás filtros (proyecto, unidad, fuente, campaña,
+ * no la de un mes. Los demás filtros (proyecto, etapa, fuente, campaña,
  * estado) sí son propiedades del trato, y se resuelven cruzando por `dealId`.
  */
 function filtrarReuniones(data: DashboardData, filters: FilterState, meta: Meta): Meeting[] {

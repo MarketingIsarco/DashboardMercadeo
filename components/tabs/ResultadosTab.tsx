@@ -5,6 +5,7 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 import { ChartBox } from '@/components/charts/ChartBox';
 import { MixedChart } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
+import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
@@ -18,12 +19,14 @@ import { firstName, monthLabel, pct, pctNum } from '@/lib/format';
 import {
   computeKpis,
   goalFor,
+  metaEtapa,
+  deltaEtapa,
   isCita,
   isPerdido,
-  isVenta,
   isVisita,
   keyOf,
-  timeAxis,
+  mesGanado,
+  timeAxisCon,
 } from '@/lib/selectors';
 import type { TabProps } from '@/lib/selectors';
 import type { Lead, SaleDeal } from '@/lib/types';
@@ -34,13 +37,15 @@ function sourceColor(name: string): string {
   return SOURCE_COLORS[name] ?? SOURCE_FALLBACK;
 }
 
-export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
+export function ResultadosTab({ data, filtered, ganados, filters, meta }: TabProps) {
   const [advisorFilter, setAdvisorFilter] = useState<number | null>(null);
 
-  const k = useMemo(() => computeKpis(filtered), [filtered]);
+  const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
   const goal = useMemo(() => goalFor(filters), [filters]);
 
-  const ventas = useMemo(() => filtered.filter(isVenta), [filtered]);
+  // Venta = trato **ganado**, por fecha de ganado. Las separaciones no suman:
+  // son plata comprometida, no una venta cerrada.
+  const ventas = ganados;
   const perdidos = useMemo(() => filtered.filter(isPerdido), [filtered]);
 
   const tasaCierre = pctNum(ventas.length, filtered.length);
@@ -60,28 +65,61 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         title="01 · Indicadores Generales"
         sub={`${filtered.length.toLocaleString('es-CO')} leads en el filtro actual`}
       >
-        <KpiGrid>
+        <KpiGrid cols={9}>
           <Kpi
+            size="xxs"
             label="Leads"
             value={k.total.toLocaleString('es-CO')}
             meta={goal ? `Meta ${goal.leads}/mes` : undefined}
             delta={metaVolumen ? pctNum(k.total - metaVolumen.leads, metaVolumen.leads) : null}
           />
+          {/* Primer escalón real del embudo: la diferencia contra Leads son
+              los que nadie tocó todavía. */}
           <Kpi
+            size="xxs"
+            label="Contactados"
+            value={k.contactados}
+            meta={metaEtapa(goal, 'contactados')}
+            delta={deltaEtapa(metaVolumen, 'contactados', k.contactados)}
+            sub={`${pct(k.contactados, k.total)}% de leads`}
+          />
+          <Kpi
+            size="xxs"
             label="Citas"
             value={k.citas}
-            meta={`${pct(k.citas, k.total)}% de leads`}
-            delta={metaVolumen ? pctNum(k.citas - metaVolumen.citas, metaVolumen.citas) : null}
+            meta={metaEtapa(goal, 'citas')}
+            delta={deltaEtapa(metaVolumen, 'citas', k.citas)}
+            sub={`${pct(k.citas, k.total)}% de leads`}
           />
           <Kpi
+            size="xxs"
             label="Visitas"
             value={k.visitas}
-            meta={`${pct(k.visitas, k.total)}% de leads`}
-            delta={metaVolumen ? pctNum(k.visitas - metaVolumen.visitas, metaVolumen.visitas) : null}
+            meta={metaEtapa(goal, 'visitas')}
+            delta={deltaEtapa(metaVolumen, 'visitas', k.visitas)}
+            sub={`${pct(k.visitas, k.total)}% de leads`}
           />
-          <Kpi label="Separaciones" value={k.separaciones} meta={`${pct(k.separaciones, k.total)}% de leads`} />
-          <Kpi label="Ventas" value={ventas.length} meta="Separación + Ganados" />
+          {/* Etapa alcanzada, igual que citas y visitas. Cierra el hueco que
+              había entre la visita y la separación. */}
           <Kpi
+            size="xxs"
+            label="Negociaciones"
+            value={k.negociaciones}
+            meta={metaEtapa(goal, 'negociaciones')}
+            delta={deltaEtapa(metaVolumen, 'negociaciones', k.negociaciones)}
+            sub={`${pct(k.negociaciones, k.total)}% de leads`}
+          />
+          <Kpi
+            size="xxs"
+            label="Separaciones"
+            value={k.separaciones}
+            meta={metaEtapa(goal, 'separaciones')}
+            delta={deltaEtapa(metaVolumen, 'separaciones', k.separaciones)}
+            sub={`${pct(k.separaciones, k.total)}% de leads`}
+          />
+          <Kpi size="xxs" label="Ventas" value={ventas.length} meta="Tratos ganados" />
+          <Kpi
+            size="xxs"
             label="Tasa de cierre"
             value={`${tasaCierre.toFixed(2)}%`}
             meta={goal ? `Meta ${goal.tasa.toFixed(2)}%` : undefined}
@@ -89,11 +127,13 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
             deltaSuffix=" pp"
           />
           <Kpi
+            size="xxs"
             label="Cierres proyectados"
             value={k.cierresProyectados}
             sub={`${k.enNegociacion} en negociación · ${k.enSeparacion} en separación`}
           />
         </KpiGrid>
+        <TasasMercado digital={filters.digital} />
       </Section>
 
       <Section title="02 · Embudo de Conversión" sub="Leads que alcanzaron cada etapa, acumulado">
@@ -133,7 +173,7 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Ventas, visitas y citas</h3>
-            <TrendChart leads={filtered} period={filters.period} goalCierres={goal?.cierres ?? null} />
+            <TrendChart leads={filtered} ventas={ventas} goalCierres={goal?.cierres ?? null} />
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Mix de fuentes en ventas</h3>
@@ -142,11 +182,11 @@ export function ResultadosTab({ data, filtered, filters, meta }: TabProps) {
         </div>
         <div className="mt-5">
           <h3 className="mb-2 text-xs font-semibold text-dim">Ventas vs. pérdidas por periodo</h3>
-          <WinLossTrend leads={filtered} period={filters.period} goalCierres={goal?.cierres ?? null} />
+          <WinLossTrend leads={filtered} ventas={ventas} goalCierres={goal?.cierres ?? null} />
         </div>
       </Section>
 
-      <SalesTable sales={data.sales} filtered={filtered} />
+      <SalesTable sales={data.sales} ventas={ventas} />
     </>
   );
 }
@@ -402,18 +442,20 @@ function SalesByProject({ ventas, projects }: { ventas: Lead[]; projects: string
 
 function TrendChart({
   leads,
-  period,
+  ventas,
   goalCierres,
 }: {
   leads: Lead[];
-  period: 'month' | 'year';
+  ventas: Lead[];
   goalCierres: number | null;
 }) {
-  const ta = timeAxis(leads, period);
+  const ta = timeAxisCon(leads, ventas);
   const buckets = ta.keys.map((key) => {
-    const rows = leads.filter((l) => keyOf(l, ta.isYear) === key);
+    const rows = leads.filter((l) => keyOf(l) === key);
     return {
-      v: rows.filter(isVenta).length,
+      // Las ventas se ubican por su mes de venta (ganado → `won_time`); citas
+      // y visitas, por el de creación del lead.
+      v: ventas.filter((l) => mesGanado(l) === key).length,
       vis: rows.filter(isVisita).length,
       c: rows.filter(isCita).length,
     };
@@ -423,7 +465,7 @@ function TrendChart({
     <ChartBox height={280}>
       <MixedChart
         data={{
-          labels: ta.keys.map((k) => (ta.isYear ? k : monthLabel(k))),
+          labels: ta.keys.map(monthLabel),
           datasets: [
             { type: 'bar' as const, label: 'Ventas', data: buckets.map((b) => b.v), backgroundColor: '#c9a96e44', borderColor: '#c9a96e', borderWidth: 2, order: 3 },
             { type: 'line' as const, label: 'Visitas', data: buckets.map((b) => b.vis), borderColor: '#4ade80', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3, order: 1 },
@@ -492,24 +534,24 @@ function SourceMix({ ventas, sources }: { ventas: Lead[]; sources: string[] }) {
 
 function WinLossTrend({
   leads,
-  period,
+  ventas,
   goalCierres,
 }: {
   leads: Lead[];
-  period: 'month' | 'year';
+  ventas: Lead[];
   goalCierres: number | null;
 }) {
-  const ta = timeAxis(leads, period);
+  const ta = timeAxisCon(leads, ventas);
   const buckets = ta.keys.map((key) => {
-    const rows = leads.filter((l) => keyOf(l, ta.isYear) === key);
-    return { v: rows.filter(isVenta).length, p: rows.filter(isPerdido).length };
+    const rows = leads.filter((l) => keyOf(l) === key);
+    return { v: ventas.filter((l) => mesGanado(l) === key).length, p: rows.filter(isPerdido).length };
   });
 
   return (
     <ChartBox height={300}>
       <MixedChart
         data={{
-          labels: ta.keys.map((k) => (ta.isYear ? k : monthLabel(k))),
+          labels: ta.keys.map(monthLabel),
           datasets: [
             { type: 'bar' as const, label: 'Perdidos', data: buckets.map((b) => b.p), backgroundColor: '#f43f5e44', borderColor: '#f43f5e', borderWidth: 2, order: 3, yAxisID: 'y' },
             { type: 'line' as const, label: 'Ventas', data: buckets.map((b) => b.v), borderColor: '#4ade80', backgroundColor: '#4ade8015', fill: false, borderWidth: 2.5, pointRadius: 5, pointBackgroundColor: '#4ade80', pointBorderColor: '#fff', pointBorderWidth: 2, tension: 0.3, order: 1, yAxisID: 'y1' },
@@ -556,26 +598,17 @@ function WinLossTrend({
   );
 }
 
-function SalesTable({ sales, filtered }: { sales: SaleDeal[]; filtered: Lead[] }) {
-  // Las ventas se cruzan contra los leads filtrados por id, así la tabla
-  // respeta la barra de filtros (el dashboard original la ignoraba).
-  const ids = useMemo(() => new Set(filtered.filter(isVenta).map((l) => l.id)), [filtered]);
+function SalesTable({ sales, ventas }: { sales: SaleDeal[]; ventas: Lead[] }) {
+  // Las ventas se cruzan por id contra las del periodo, así la tabla respeta
+  // la barra de filtros — y los ganados, su fecha de ganado.
+  const ids = useMemo(() => new Set(ventas.map((l) => l.id)), [ventas]);
   const rows = useMemo(
     () => sales.filter((s) => ids.has(s.id)).sort((a, b) => b.date.localeCompare(a.date)),
     [sales, ids],
   );
-  const pendientes = rows.filter((r) => r.status === 'Abierto').length;
 
   return (
-    <Section
-      title="05 · Detalle de Ventas"
-      sub={
-        <>
-          Leads que llegaron a Separación o quedaron marcados como Ganado
-          {pendientes > 0 ? ` · ${pendientes} con separación pendiente de actualizar estado en Pipedrive` : ''}
-        </>
-      }
-    >
+    <Section title="05 · Detalle de Ventas" sub="Tratos ganados en el periodo, por fecha de ganado">
       <DataTable
         rows={rows}
         maxHeight={380}
