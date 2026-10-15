@@ -59,6 +59,13 @@ export interface Lead {
    */
   labels: number[];
   content: ContentType;
+  /**
+   * Índice en `Meta.contenidos`: la pieza **tal como está escrita** en el
+   * campo "Contenido" del trato ("INA101. Carrusel - Septiembre 2026"). Apunta
+   * a "Sin contenido" cuando el campo está vacío. `content` se queda con la
+   * clasificación Reel / Estática que usa el capítulo 03.
+   */
+  contenido: number;
   /** Index into `PROJECTS` — derived from `pipeline_id`. */
   project: number;
   /** A lost lead worth re-engaging (unreachable) vs. a hard no (not a fit). */
@@ -234,6 +241,8 @@ export interface ActivityDay {
 export interface Meta {
   sources: string[];
   campaigns: string[];
+  /** Valores del campo "Contenido" descubiertos en la carga, más "Sin contenido". */
+  contenidos: string[];
   /** Etiquetas de trato descubiertas en la carga, más "Sin etiqueta". */
   labels: string[];
   projects: string[];

@@ -64,7 +64,7 @@ export function Kpi({ label, value, meta, delta, deltaSuffix = '%', sub, size = 
  * un embudo partido en dos filas se lee como dos cosas distintas.
  *
  * Sin `cols` se reparte sola con `auto-fit`, que es lo correcto donde la fila
- * no es un embudo y las tarjetas llevan cifras largas (el capítulo 05 de
+ * no es un embudo y las tarjetas llevan cifras largas (el capítulo 06 de
  * inversión tiene ocho KPIs en pesos: forzarlos a una línea los volvería
  * ilegibles).
  */

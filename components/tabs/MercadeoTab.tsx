@@ -39,7 +39,7 @@ import {
   STAGE_SEPARACION,
 } from '@/lib/config/negocio';
 import type { Bolsa } from '@/lib/config/negocio';
-import { fmtCOP, monthLabel, normalize, pct, sourceIndices } from '@/lib/format';
+import { fmtCOP, monthLabel, normalize, pct, pctNum, sourceIndices } from '@/lib/format';
 import { cobertura, coberturaMensual, combinaciones, distribucion, suficiencia } from '@/lib/buyer';
 import type { Distribucion } from '@/lib/buyer';
 import {
@@ -67,6 +67,17 @@ import {
 } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { Lead, LossGroup, Meta } from '@/lib/types';
+import {
+  FORMATOS,
+  FORMATO_COLOR,
+  SIN_CAMPANA,
+  SIN_CONTENIDO,
+  TRAMOS,
+  TRAMO_COLOR,
+  desempenoPor,
+  tramosPor,
+} from '@/lib/campanas';
+import type { FilaPauta } from '@/lib/campanas';
 import { CONTENT_REEL, CONTENT_STATIC, STATUS_LOST, STATUS_OPEN } from '@/lib/types';
 
 // ── Constantes locales ───────────────────────────────────────────────
@@ -129,8 +140,16 @@ export function MercadeoTab({ data, filtered, ganados, filters, meta }: TabProps
         </div>
       </Section>
 
-      {/* 04 · Motivos de Pérdida */}
-      <Section title="04 · Motivos de Pérdida" sub="Análisis de leads perdidos por grupo y razón individual">
+      {/* 04 · Campañas y Contenidos */}
+      <Section
+        title="04 · Campañas y Contenidos"
+        sub="Desempeño por los campos Campaña y Contenido del trato · qué trae volumen y qué trae citas"
+      >
+        <CampanasContenidos leads={filtered} ganados={ganados} meta={meta} />
+      </Section>
+
+      {/* 05 · Motivos de Pérdida */}
+      <Section title="05 · Motivos de Pérdida" sub="Análisis de leads perdidos por grupo y razón individual">
         <LossSection leads={filtered} lossReasons={meta.lossReasons} />
         <div className="mt-6">
           <h3 className="mb-2 text-xs font-semibold text-dim">Pérdidas por Campaña</h3>
@@ -141,25 +160,25 @@ export function MercadeoTab({ data, filtered, ganados, filters, meta }: TabProps
         </div>
       </Section>
 
-      {/* 05 · Inversión en Mercadeo */}
+      {/* 06 · Inversión en Mercadeo */}
       <Section
-        title="05 · Inversión en Mercadeo"
+        title="06 · Inversión en Mercadeo"
         sub="Presupuesto P&G clasificado en Digital / No-Digital · según los filtros activos"
       >
         <Inversion filtered={filtered} ganados={ganados} filters={filters} meta={meta} />
       </Section>
 
-      {/* 06 · Campañas Outbound */}
+      {/* 07 · Campañas Outbound */}
       <Section
-        title="06 · Campañas Outbound"
+        title="07 · Campañas Outbound"
         sub="Efectividad de las campañas de reactivación y recuperación, por etiqueta del trato"
       >
         <Outbound leads={filtered} ganados={ganados} labels={meta.labels} />
       </Section>
 
-      {/* 07 · Buyer Persona */}
+      {/* 08 · Buyer Persona */}
       <Section
-        title="07 · Buyer Persona"
+        title="08 · Buyer Persona"
         sub="Quién es el cliente que estamos registrando en el embudo · demográfico, psicográfico y económico"
       >
         <BuyerPersona filtered={filtered} ganados={ganados} meta={meta} />
@@ -565,7 +584,7 @@ function Timeline({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 06 · Campañas Outbound
+// 07 · Campañas Outbound
 // ─────────────────────────────────────────────────────────────────────
 
 interface CampanaOutbound {
@@ -974,7 +993,272 @@ function DigitalMonth({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 04 · Motivos de Pérdida
+// 04 · Campañas y Contenidos
+//
+// Los dos campos de pauta del trato. "Campaña" dice qué conjunto de anuncios
+// trajo el lead; "Contenido", qué pieza. Cuatro piezas, dos por campo:
+//   · Campaña: a dónde llegan sus leads (barras apiladas por tramo) + tabla.
+//   · Contenido: tasa a cita por pieza, coloreada por formato + tabla.
+// Toda la lógica vive en `lib/campanas.ts`; aquí sólo se pinta.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Volumen mínimo para que una tasa se compare contra el promedio. */
+const PAUTA_MIN_LEADS = 5;
+/** Cuántas campañas entran a la gráfica; la tabla las muestra todas. */
+const PAUTA_TOP = 10;
+
+function recorta(s: string, n = 46): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+function CampanasContenidos({ leads, ganados, meta }: { leads: Lead[]; ganados: Lead[]; meta: Meta }) {
+  const campanas = useMemo(
+    () => desempenoPor(leads, ganados, (l) => l.campaign, meta.campaigns, SIN_CAMPANA),
+    [leads, ganados, meta.campaigns],
+  );
+  // Una copia de la caché anterior a este capítulo no trae `contenidos`: hasta
+  // que venza (una hora como máximo) todo cae en "Sin contenido" en vez de
+  // tumbar la pestaña.
+  const contenidos = useMemo(() => meta.contenidos ?? [SIN_CONTENIDO], [meta.contenidos]);
+  const piezas = useMemo(
+    () => desempenoPor(leads, ganados, (l) => l.contenido ?? 0, contenidos, SIN_CONTENIDO),
+    [leads, ganados, contenidos],
+  );
+
+  const conCampana = campanas.filter((f) => !f.sinDato);
+  const conPieza = piezas.filter((f) => !f.sinDato);
+  const nCampana = conCampana.reduce((a, f) => a + f.leads, 0);
+  const nPieza = conPieza.reduce((a, f) => a + f.leads, 0);
+  const citasCampana = conCampana.reduce((a, f) => a + f.citas, 0);
+  const citasPieza = conPieza.reduce((a, f) => a + f.citas, 0);
+  const promCampana = pctNum(citasCampana, nCampana);
+  const promPieza = pctNum(citasPieza, nPieza);
+
+  if (leads.length === 0) {
+    return <p className="text-xs text-muted">Sin leads en el filtro actual.</p>;
+  }
+
+  return (
+    <div>
+      <p className="mb-4 text-2xs text-muted">
+        {nCampana} de {leads.length} leads del filtro tienen campaña ({pct(nCampana, leads.length)}%) y {nPieza} tienen
+        contenido ({pct(nPieza, leads.length)}%). Las tasas son de alcance sobre los leads de cada fila; los ganados se
+        ubican por fecha de ganado.
+      </p>
+
+      <h3 className="mb-1 text-xs font-semibold text-dim">Campaña · a dónde llegan sus leads</h3>
+      <p className="mb-2 text-2xs text-muted">
+        Top {PAUTA_TOP} campañas por volumen. Cada barra reparte los leads según la etapa más lejana que alcanzaron.
+      </p>
+      <TramosCampana leads={leads} filas={conCampana.slice(0, PAUTA_TOP)} />
+
+      <h3 className="mb-1 mt-6 text-xs font-semibold text-dim">Campaña · desempeño</h3>
+      <p className="mb-2 text-2xs text-muted">
+        % Cita en verde o rojo frente al promedio de las campañas ({promCampana.toFixed(1)}%), sólo con{' '}
+        {PAUTA_MIN_LEADS} leads o más.
+      </p>
+      <TablaPauta filas={campanas} etiqueta="Campaña" projects={meta.projects} promedio={promCampana} />
+
+      <h3 className="mb-1 mt-6 text-xs font-semibold text-dim">Contenido · tasa a cita por pieza</h3>
+      <p className="mb-2 text-2xs text-muted">
+        Piezas con {PAUTA_MIN_LEADS} leads o más, de mayor a menor tasa. Entre paréntesis, los leads de la pieza. Promedio
+        de las piezas: {promPieza.toFixed(1)}%.
+      </p>
+      <TasaContenido filas={conPieza.filter((f) => f.leads >= PAUTA_MIN_LEADS)} />
+
+      <h3 className="mb-1 mt-6 text-xs font-semibold text-dim">Contenido · desempeño</h3>
+      <TablaPauta filas={piezas} etiqueta="Contenido" projects={meta.projects} promedio={promPieza} conFormato />
+    </div>
+  );
+}
+
+function TramosCampana({ leads, filas }: { leads: Lead[]; filas: FilaPauta[] }) {
+  const idxs = filas.map((f) => f.idx);
+  const conteos = useMemo(() => tramosPor(leads, (l) => l.campaign, idxs), [leads, idxs.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (filas.length === 0) {
+    return <p className="text-xs text-muted">Ningún lead del filtro tiene campaña asignada.</p>;
+  }
+
+  return (
+    <ChartBox height={Math.max(160, filas.length * 34 + 70)}>
+      <Bar
+        data={{
+          labels: filas.map((f) => `${recorta(f.nombre)} (${f.leads})`),
+          datasets: TRAMOS.map((t, k) => ({
+            label: t,
+            data: conteos[k],
+            backgroundColor: `${TRAMO_COLOR[t]}cc`,
+            borderColor: TRAMO_COLOR[t],
+            borderWidth: 1,
+          })),
+        }}
+        options={{
+          indexAxis: 'y',
+          plugins: {
+            legend: legendBottom,
+            tooltip: {
+              mode: 'index',
+              callbacks: {
+                label: (ctx) => {
+                  const total = filas[ctx.dataIndex]?.leads ?? 0;
+                  const v = Number(ctx.raw ?? 0);
+                  return `${ctx.dataset.label}: ${v} (${pct(v, total)}%)`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { stacked: true, beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+            y: { stacked: true, grid: { display: false }, ticks: { color: TICK_COLOR, font: { size: 10 } } },
+          },
+        }}
+      />
+    </ChartBox>
+  );
+}
+
+function TasaContenido({ filas }: { filas: FilaPauta[] }) {
+  const orden = [...filas].sort((a, b) => b.citas / b.leads - a.citas / a.leads || b.leads - a.leads);
+  const formatos = FORMATOS.filter((fm) => orden.some((f) => f.formato === fm));
+
+  if (orden.length === 0) {
+    return (
+      <p className="text-xs text-muted">
+        Ninguna pieza llega a {PAUTA_MIN_LEADS} leads en el filtro actual.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <ChartBox height={Math.max(160, orden.length * 30 + 50)}>
+        <Bar
+          data={{
+            labels: orden.map((f) => `${recorta(f.nombre)} (${f.leads})`),
+            datasets: [
+              {
+                label: '% a cita',
+                data: orden.map((f) => Number(pctNum(f.citas, f.leads).toFixed(1))),
+                backgroundColor: orden.map((f) => `${FORMATO_COLOR[f.formato]}cc`),
+                borderColor: orden.map((f) => FORMATO_COLOR[f.formato]),
+                borderWidth: 1,
+              },
+            ],
+          }}
+          options={{
+            indexAxis: 'y',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const f = orden[ctx.dataIndex];
+                    return f ? `${f.formato} · ${f.citas} de ${f.leads} leads a cita (${pct(f.citas, f.leads)}%)` : '';
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                grid: { color: GRID_COLOR },
+                ticks: { color: TICK_COLOR, callback: (v) => `${v}%` },
+              },
+              y: { grid: { display: false }, ticks: { color: TICK_COLOR, font: { size: 10 } } },
+            },
+          }}
+        />
+      </ChartBox>
+      <div className="mt-2 flex flex-wrap gap-3 text-2xs text-dim">
+        {formatos.map((fm) => (
+          <span key={fm} className="inline-flex items-center gap-1">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: FORMATO_COLOR[fm] }} />
+            {fm}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TablaPauta({
+  filas,
+  etiqueta,
+  projects,
+  promedio,
+  conFormato = false,
+}: {
+  filas: FilaPauta[];
+  etiqueta: string;
+  projects: string[];
+  promedio: number;
+  conFormato?: boolean;
+}) {
+  const fecha = (d: string) => (d ? `${d.slice(8)}/${d.slice(5, 7)}` : '–');
+  const tasaCita = (f: FilaPauta) => {
+    const v = pctNum(f.citas, f.leads);
+    const comparable = !f.sinDato && f.leads >= PAUTA_MIN_LEADS;
+    const color = !comparable ? undefined : v >= promedio ? '#16a34a' : '#dc2626';
+    return (
+      <span className="font-semibold" style={{ color }}>
+        {f.leads ? `${v.toFixed(1)}%` : '–'}
+      </span>
+    );
+  };
+
+  return (
+    <DataTable
+      rows={filas}
+      maxHeight={380}
+      empty="Sin leads en el filtro actual."
+      columns={[
+        {
+          header: etiqueta,
+          cell: (f) => (
+            <span className={f.sinDato ? 'italic text-muted' : 'font-semibold'} title={f.nombre}>
+              {recorta(f.nombre, 52)}
+            </span>
+          ),
+        },
+        ...(conFormato
+          ? [
+              {
+                header: 'Formato',
+                cell: (f: FilaPauta) =>
+                  f.sinDato ? (
+                    <span className="text-muted">–</span>
+                  ) : (
+                    <span style={{ color: FORMATO_COLOR[f.formato] }} className="font-semibold">
+                      {f.formato}
+                    </span>
+                  ),
+              },
+            ]
+          : []),
+        { header: 'Proyecto', cell: (f) => <span className="text-2xs">{projects[f.proyecto] ?? '–'}</span> },
+        {
+          header: 'Captación',
+          cell: (f) => (
+            <span className="text-2xs text-dim">
+              {f.desde ? `${fecha(f.desde)} a ${fecha(f.hasta)}` : '–'}
+            </span>
+          ),
+        },
+        { header: 'Leads', cell: (f) => <b>{f.leads}</b>, align: 'right' },
+        { header: 'Citas+', cell: (f) => f.citas, align: 'right' },
+        { header: 'Visitas', cell: (f) => f.visitas, align: 'right' },
+        { header: 'Ganados', cell: (f) => f.ganados || <span className="text-muted">–</span>, align: 'right' },
+        { header: '% Cita', cell: tasaCita, align: 'right' },
+        { header: '% Visita', cell: (f) => (f.leads ? `${pct(f.visitas, f.leads)}%` : '–'), align: 'right' },
+        { header: '% Perdido', cell: (f) => (f.leads ? `${pct(f.perdidos, f.leads)}%` : '–'), align: 'right' },
+      ]}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 05 · Motivos de Pérdida
 // ─────────────────────────────────────────────────────────────────────
 function LossSection({
   leads,
@@ -1170,7 +1454,7 @@ function LossByCampaign({ leads, campaigns }: { leads: Lead[]; campaigns: string
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 05 · Inversión en Mercadeo
+// 06 · Inversión en Mercadeo
 //
 // El presupuesto del P&G viene partido en 16 rubros, cada uno marcado como
 // digital o no-digital (ver `RUBROS` en config/negocio). De ahí sale todo:
@@ -1502,7 +1786,7 @@ function RubrosTable({ bolsas, months }: { bolsas: Bolsa[]; months: string[] }) 
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 07 · Buyer Persona
+// 08 · Buyer Persona
 //
 // Quién es el cliente que estamos registrando en cada embudo, según los campos
 // de perfilamiento que el asesor diligencia en sala. Todo el capítulo respeta
