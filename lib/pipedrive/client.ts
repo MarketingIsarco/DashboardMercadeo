@@ -180,8 +180,8 @@ export async function fetchAllDeals(base: string): Promise<PipedriveDeal[]> {
  *
  * Es el barrido más caro del refresco, pero no hay alternativa: la API no
  * expone "la primera actividad de cada trato", y pedirlas trato por trato
- * (`/deals/{id}/activities`) serían ~7.200 requests. Con la caché de 15 min
- * esto corre 4 veces por hora como máximo.
+ * (`/deals/{id}/activities`) serían ~7.200 requests. Con la caché compartida
+ * de 1 hora esto corre una vez por hora como máximo.
  */
 export async function fetchAllActivities(base: string): Promise<PipedriveActivity[]> {
   // Se deduplica por id: el barrido dura ~60 requests y si alguien crea o
