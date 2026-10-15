@@ -1,10 +1,9 @@
 /**
- * Capítulo 04 de Mercadeo · Campañas y Contenidos.
+ * Capítulo 04 de Mercadeo · Campañas.
  *
- * Desempeño de los dos campos de pauta del trato: "Campaña" (el conjunto de
- * anuncios) y "Contenido" (la pieza que trajo el lead). Lógica pura, sin
- * React, para poder probarla con asserts en Node: Chart.js dibuja en canvas y
- * sus cifras no se leen desde el DOM.
+ * Desempeño del campo "Campaña" del trato (el conjunto de anuncios que trajo
+ * el lead). Lógica pura, sin React, para poder probarla con asserts en Node:
+ * Chart.js dibuja en canvas y sus cifras no se leen desde el DOM.
  *
  * Convenciones, las mismas del resto de la pestaña:
  * · Leads, citas, visitas y perdidos se cuentan sobre `filtered` (fecha de
@@ -18,43 +17,12 @@ import { STATUS_LOST, STATUS_OPEN, STATUS_WON } from '@/lib/types';
 import { STAGE_CITA, STAGE_VISITA } from '@/lib/config/negocio';
 
 export const SIN_CAMPANA = 'Sin campaña';
-export const SIN_CONTENIDO = 'Sin contenido';
-
-/** Formato de la pieza, leído del nombre del contenido. */
-export type Formato = 'Reel' | 'Estática' | 'Carrusel' | 'Otro';
-export const FORMATOS: Formato[] = ['Reel', 'Estática', 'Carrusel', 'Otro'];
-export const FORMATO_COLOR: Record<Formato, string> = {
-  Reel: '#6366f1',
-  Estática: '#22d3ee',
-  Carrusel: '#c9a96e',
-  Otro: '#94a3b8',
-};
-
-function plano(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
-}
-
-/**
- * El CRM nombra la pieza en texto libre ("INA101. Carrusel - Septiembre 2026",
- * "TNG2A. Anuncios Junio V2 - Reel Go Big 1"). Si el nombre trae dos formatos,
- * gana el primero en este orden, que es el más específico.
- */
-export function formatoDe(contenido: string): Formato {
-  const n = plano(contenido);
-  if (n.includes('reel')) return 'Reel';
-  if (n.includes('carrusel') || n.includes('carousel')) return 'Carrusel';
-  if (n.includes('estatica')) return 'Estática';
-  return 'Otro';
-}
 
 export interface FilaPauta {
-  /** Índice en `meta.campaigns` o `meta.contenidos`. */
+  /** Índice en la lista de nombres (`meta.campaigns`). */
   idx: number;
   nombre: string;
-  /** `true` para la fila "Sin campaña" / "Sin contenido". */
+  /** `true` para la fila "Sin campaña". */
   sinDato: boolean;
   leads: number;
   citas: number;
@@ -68,8 +36,6 @@ export interface FilaPauta {
   /** Primer y último lead captado (`YYYY-MM-DD`); `''` sin leads. */
   desde: string;
   hasta: string;
-  /** Sólo tiene sentido en contenidos; en campañas se deja en 'Otro'. */
-  formato: Formato;
 }
 
 /**
@@ -101,7 +67,6 @@ export function desempenoPor(
         proyecto: -1,
         desde: '',
         hasta: '',
-        formato: formatoDe(nombre),
         porProyecto: new Map(),
       };
       filas.set(i, f);

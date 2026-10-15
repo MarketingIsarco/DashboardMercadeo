@@ -48,7 +48,6 @@ import {
 } from './client';
 import type { PipedriveActivity, PipedriveDeal } from './client';
 import { buildPerfilExtractor } from './perfil';
-import { SIN_CAMPANA, SIN_CONTENIDO } from '@/lib/campanas';
 
 function classifyLossGroup(reason: string): LossGroup | '' {
   if (!reason) return '';
@@ -387,8 +386,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const labelIdx = new Map<string, number>();
   const campaigns: string[] = [];
   const campaignIdx = new Map<string, number>();
-  const contenidos: string[] = [];
-  const contenidoIdx = new Map<string, number>();
   const advisors: string[] = [];
   const advisorIdx = new Map<string, number>();
   const lossReasons: string[] = [];
@@ -431,7 +428,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const source = intern(sources, sourceIdx, sourceLabel);
 
     const rawCampana = deal[FIELD.CAMPANA];
-    const campaignLabel = typeof rawCampana === 'string' && rawCampana.trim() ? rawCampana.trim() : SIN_CAMPANA;
+    const campaignLabel = typeof rawCampana === 'string' && rawCampana.trim() ? rawCampana.trim() : 'Sin campaña';
     const campaign = intern(campaigns, campaignIdx, campaignLabel);
 
     const advisorLabel = deal.owner_name?.trim() || 'Sin asignar';
@@ -453,13 +450,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
     const rawContenido = deal[FIELD.CONTENIDO];
     const content = classifyContent(typeof rawContenido === 'string' ? rawContenido : '');
-    // Espacios repetidos colapsados: es texto libre y "Reel  1" y "Reel 1"
-    // son la misma pieza.
-    const contenidoLabel =
-      typeof rawContenido === 'string' && rawContenido.trim()
-        ? rawContenido.trim().replace(/\s+/g, ' ')
-        : SIN_CONTENIDO;
-    const contenido = intern(contenidos, contenidoIdx, contenidoLabel);
 
     const reason = deal.lost_reason?.trim() ?? '';
     const isLost = status === STATUS_LOST;
@@ -483,7 +473,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
       campaign,
       labels: leadLabels,
       content,
-      contenido,
       project,
       recoverable: isLost && isRecoverable(reason),
       advisor,
@@ -535,7 +524,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const meta: Meta = {
     sources,
     campaigns,
-    contenidos,
     labels,
     projects: [...PROJECTS],
     advisors,

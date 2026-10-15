@@ -68,10 +68,7 @@ import {
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { Lead, LossGroup, Meta } from '@/lib/types';
 import {
-  FORMATOS,
-  FORMATO_COLOR,
   SIN_CAMPANA,
-  SIN_CONTENIDO,
   TRAMOS,
   TRAMO_COLOR,
   desempenoPor,
@@ -140,12 +137,12 @@ export function MercadeoTab({ data, filtered, ganados, filters, meta }: TabProps
         </div>
       </Section>
 
-      {/* 04 · Campañas y Contenidos */}
+      {/* 04 · Campañas */}
       <Section
-        title="04 · Campañas y Contenidos"
-        sub="Desempeño por los campos Campaña y Contenido del trato · qué trae volumen y qué trae citas"
+        title="04 · Campañas"
+        sub="Desempeño por el campo Campaña del trato · qué trae volumen y qué trae citas"
       >
-        <CampanasContenidos leads={filtered} ganados={ganados} meta={meta} />
+        <Campanas leads={filtered} ganados={ganados} meta={meta} />
       </Section>
 
       {/* 05 · Motivos de Pérdida */}
@@ -993,12 +990,11 @@ function DigitalMonth({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 04 · Campañas y Contenidos
+// 04 · Campañas
 //
-// Los dos campos de pauta del trato. "Campaña" dice qué conjunto de anuncios
-// trajo el lead; "Contenido", qué pieza. Cuatro piezas, dos por campo:
-//   · Campaña: a dónde llegan sus leads (barras apiladas por tramo) + tabla.
-//   · Contenido: tasa a cita por pieza, coloreada por formato + tabla.
+// El campo "Campaña" del trato: qué conjunto de anuncios trajo el lead.
+//   · A dónde llegan sus leads (barras apiladas por tramo).
+//   · Tabla de desempeño.
 // Toda la lógica vive en `lib/campanas.ts`; aquí sólo se pinta.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1011,28 +1007,16 @@ function recorta(s: string, n = 46): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
 
-function CampanasContenidos({ leads, ganados, meta }: { leads: Lead[]; ganados: Lead[]; meta: Meta }) {
+function Campanas({ leads, ganados, meta }: { leads: Lead[]; ganados: Lead[]; meta: Meta }) {
   const campanas = useMemo(
     () => desempenoPor(leads, ganados, (l) => l.campaign, meta.campaigns, SIN_CAMPANA),
     [leads, ganados, meta.campaigns],
   );
-  // Una copia de la caché anterior a este capítulo no trae `contenidos`: hasta
-  // que venza (una hora como máximo) todo cae en "Sin contenido" en vez de
-  // tumbar la pestaña.
-  const contenidos = useMemo(() => meta.contenidos ?? [SIN_CONTENIDO], [meta.contenidos]);
-  const piezas = useMemo(
-    () => desempenoPor(leads, ganados, (l) => l.contenido ?? 0, contenidos, SIN_CONTENIDO),
-    [leads, ganados, contenidos],
-  );
 
   const conCampana = campanas.filter((f) => !f.sinDato);
-  const conPieza = piezas.filter((f) => !f.sinDato);
   const nCampana = conCampana.reduce((a, f) => a + f.leads, 0);
-  const nPieza = conPieza.reduce((a, f) => a + f.leads, 0);
   const citasCampana = conCampana.reduce((a, f) => a + f.citas, 0);
-  const citasPieza = conPieza.reduce((a, f) => a + f.citas, 0);
   const promCampana = pctNum(citasCampana, nCampana);
-  const promPieza = pctNum(citasPieza, nPieza);
 
   if (leads.length === 0) {
     return <p className="text-xs text-muted">Sin leads en el filtro actual.</p>;
@@ -1041,9 +1025,8 @@ function CampanasContenidos({ leads, ganados, meta }: { leads: Lead[]; ganados: 
   return (
     <div>
       <p className="mb-4 text-2xs text-muted">
-        {nCampana} de {leads.length} leads del filtro tienen campaña ({pct(nCampana, leads.length)}%) y {nPieza} tienen
-        contenido ({pct(nPieza, leads.length)}%). Las tasas son de alcance sobre los leads de cada fila; los ganados se
-        ubican por fecha de ganado.
+        {nCampana} de {leads.length} leads del filtro tienen campaña ({pct(nCampana, leads.length)}%). Las tasas son de
+        alcance sobre los leads de cada fila; los ganados se ubican por fecha de ganado.
       </p>
 
       <h3 className="mb-1 text-xs font-semibold text-dim">Campaña · a dónde llegan sus leads</h3>
@@ -1058,16 +1041,6 @@ function CampanasContenidos({ leads, ganados, meta }: { leads: Lead[]; ganados: 
         {PAUTA_MIN_LEADS} leads o más.
       </p>
       <TablaPauta filas={campanas} etiqueta="Campaña" projects={meta.projects} promedio={promCampana} />
-
-      <h3 className="mb-1 mt-6 text-xs font-semibold text-dim">Contenido · tasa a cita por pieza</h3>
-      <p className="mb-2 text-2xs text-muted">
-        Piezas con {PAUTA_MIN_LEADS} leads o más, de mayor a menor tasa. Entre paréntesis, los leads de la pieza. Promedio
-        de las piezas: {promPieza.toFixed(1)}%.
-      </p>
-      <TasaContenido filas={conPieza.filter((f) => f.leads >= PAUTA_MIN_LEADS)} />
-
-      <h3 className="mb-1 mt-6 text-xs font-semibold text-dim">Contenido · desempeño</h3>
-      <TablaPauta filas={piezas} etiqueta="Contenido" projects={meta.projects} promedio={promPieza} conFormato />
     </div>
   );
 }
@@ -1118,82 +1091,16 @@ function TramosCampana({ leads, filas }: { leads: Lead[]; filas: FilaPauta[] }) 
   );
 }
 
-function TasaContenido({ filas }: { filas: FilaPauta[] }) {
-  const orden = [...filas].sort((a, b) => b.citas / b.leads - a.citas / a.leads || b.leads - a.leads);
-  const formatos = FORMATOS.filter((fm) => orden.some((f) => f.formato === fm));
-
-  if (orden.length === 0) {
-    return (
-      <p className="text-xs text-muted">
-        Ninguna pieza llega a {PAUTA_MIN_LEADS} leads en el filtro actual.
-      </p>
-    );
-  }
-
-  return (
-    <div>
-      <ChartBox height={Math.max(160, orden.length * 30 + 50)}>
-        <Bar
-          data={{
-            labels: orden.map((f) => `${recorta(f.nombre)} (${f.leads})`),
-            datasets: [
-              {
-                label: '% a cita',
-                data: orden.map((f) => Number(pctNum(f.citas, f.leads).toFixed(1))),
-                backgroundColor: orden.map((f) => `${FORMATO_COLOR[f.formato]}cc`),
-                borderColor: orden.map((f) => FORMATO_COLOR[f.formato]),
-                borderWidth: 1,
-              },
-            ],
-          }}
-          options={{
-            indexAxis: 'y',
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: (ctx) => {
-                    const f = orden[ctx.dataIndex];
-                    return f ? `${f.formato} · ${f.citas} de ${f.leads} leads a cita (${pct(f.citas, f.leads)}%)` : '';
-                  },
-                },
-              },
-            },
-            scales: {
-              x: {
-                beginAtZero: true,
-                grid: { color: GRID_COLOR },
-                ticks: { color: TICK_COLOR, callback: (v) => `${v}%` },
-              },
-              y: { grid: { display: false }, ticks: { color: TICK_COLOR, font: { size: 10 } } },
-            },
-          }}
-        />
-      </ChartBox>
-      <div className="mt-2 flex flex-wrap gap-3 text-2xs text-dim">
-        {formatos.map((fm) => (
-          <span key={fm} className="inline-flex items-center gap-1">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: FORMATO_COLOR[fm] }} />
-            {fm}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function TablaPauta({
   filas,
   etiqueta,
   projects,
   promedio,
-  conFormato = false,
 }: {
   filas: FilaPauta[];
   etiqueta: string;
   projects: string[];
   promedio: number;
-  conFormato?: boolean;
 }) {
   const fecha = (d: string) => (d ? `${d.slice(8)}/${d.slice(5, 7)}` : '–');
   const tasaCita = (f: FilaPauta) => {
@@ -1221,21 +1128,6 @@ function TablaPauta({
             </span>
           ),
         },
-        ...(conFormato
-          ? [
-              {
-                header: 'Formato',
-                cell: (f: FilaPauta) =>
-                  f.sinDato ? (
-                    <span className="text-muted">–</span>
-                  ) : (
-                    <span style={{ color: FORMATO_COLOR[f.formato] }} className="font-semibold">
-                      {f.formato}
-                    </span>
-                  ),
-              },
-            ]
-          : []),
         { header: 'Proyecto', cell: (f) => <span className="text-2xs">{projects[f.proyecto] ?? '–'}</span> },
         {
           header: 'Captación',
