@@ -70,10 +70,10 @@ function fmtAge(min: number): string {
 
 function ageColor(min: number, alpha: boolean): string {
   const s = alpha ? '66' : '';
-  if (min < 1440) return `#4ade80${s}`;
-  if (min < 10080) return `#22d3ee${s}`;
-  if (min < 43200) return `#f59e0b${s}`;
-  return `#f43f5e${s}`;
+  if (min < 1440) return `#12a56b${s}`;
+  if (min < 10080) return `#18a3c5${s}`;
+  if (min < 43200) return `#f2b134${s}`;
+  return `#d6455a${s}`;
 }
 
 function ageBucket(min: number): number {
@@ -82,8 +82,8 @@ function ageBucket(min: number): number {
 
 // Colores de etapa (7 etapas). Los 6 primeros vienen del HTML; añadimos un gris
 // para "Firma & Entrega", que el original no coloreaba.
-const STAGE_BG = ['#6366f166', '#a78bfa66', '#f59e0b66', '#4ade8066', '#22d3ee66', '#c9a96e66', '#88888866'];
-const STAGE_BRD = ['#6366f1', '#a78bfa', '#f59e0b', '#4ade80', '#22d3ee', '#c9a96e', '#888888'];
+const STAGE_BG = ['#0b5f7e66', '#8a6bbf66', '#f2b13466', '#12a56b66', '#18a3c566', '#ff8a3d66', '#94a3b866'];
+const STAGE_BRD = ['#0b5f7e', '#8a6bbf', '#f2b134', '#12a56b', '#18a3c5', '#ff8a3d', '#94a3b8'];
 
 interface PresentAdvisor {
   name: string;
@@ -284,11 +284,11 @@ function LeadsPorAsesor({ leads, ganados, advisors }: AsesoresProps) {
         data={{
           labels: advisors.map((a) => a.short),
           datasets: [
-            { label: 'Leads', data: rows.map((r) => r.l), backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
-            { label: 'Contactados', data: rows.map((r) => r.ct), backgroundColor: '#a78bfa44', borderColor: '#a78bfa', borderWidth: 2 },
-            { label: 'Citas', data: rows.map((r) => r.c), backgroundColor: '#22d3ee44', borderColor: '#22d3ee', borderWidth: 2 },
-            { label: 'Visitas', data: rows.map((r) => r.v), backgroundColor: '#4ade8044', borderColor: '#4ade80', borderWidth: 2 },
-            { label: 'Sep+Cierres', data: rows.map((r) => r.g), backgroundColor: '#c9a96e44', borderColor: '#c9a96e', borderWidth: 2 },
+            { label: 'Leads', data: rows.map((r) => r.l), backgroundColor: '#0b5f7e44', borderColor: '#0b5f7e', borderWidth: 2 },
+            { label: 'Contactados', data: rows.map((r) => r.ct), backgroundColor: '#8a6bbf44', borderColor: '#8a6bbf', borderWidth: 2 },
+            { label: 'Citas', data: rows.map((r) => r.c), backgroundColor: '#18a3c544', borderColor: '#18a3c5', borderWidth: 2 },
+            { label: 'Visitas', data: rows.map((r) => r.v), backgroundColor: '#12a56b44', borderColor: '#12a56b', borderWidth: 2 },
+            { label: 'Sep+Cierres', data: rows.map((r) => r.g), backgroundColor: '#ff8a3d44', borderColor: '#ff8a3d', borderWidth: 2 },
           ],
         }}
         options={{
@@ -341,11 +341,11 @@ function Cumplimiento({
         <div className="mb-2 flex flex-wrap gap-4 text-2xs text-muted">
           <span>
             Meta citas ({months} {months === 1 ? 'mes' : 'meses'}): <b className="text-text">{metaCitas}</b> · logradas{' '}
-            <b style={{ color: '#6366f1' }}>{kCitas}</b> ({pct(kCitas, metaCitas)}%)
+            <b style={{ color: '#0b5f7e' }}>{kCitas}</b> ({pct(kCitas, metaCitas)}%)
           </span>
           <span>
             Meta visitas: <b className="text-text">{metaVisitas}</b> · logradas{' '}
-            <b style={{ color: '#16a34a' }}>{kVisitas}</b> ({pct(kVisitas, metaVisitas)}%)
+            <b style={{ color: '#0e8a59' }}>{kVisitas}</b> ({pct(kVisitas, metaVisitas)}%)
           </span>
         </div>
       ) : null}
@@ -354,8 +354,8 @@ function Cumplimiento({
           data={{
             labels: advisors.map((a) => a.short),
             datasets: [
-              { label: 'Citas agendadas', data: rows.map((r) => r.citas), backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
-              { label: 'Visitas realizadas', data: rows.map((r) => r.vis), backgroundColor: '#4ade8066', borderColor: '#4ade80', borderWidth: 2 },
+              { label: 'Citas agendadas', data: rows.map((r) => r.citas), backgroundColor: '#0b5f7e44', borderColor: '#0b5f7e', borderWidth: 2 },
+              { label: 'Visitas realizadas', data: rows.map((r) => r.vis), backgroundColor: '#12a56b66', borderColor: '#12a56b', borderWidth: 2 },
             ],
           }}
           options={{
@@ -453,7 +453,7 @@ function TablaAsesor({ leads, ganados, advisors }: AsesoresProps) {
           header: 'Perdidos',
           align: 'right',
           cell: (r) => (
-            <span style={Number(r.tPer) > 70 ? { color: '#f43f5e', fontWeight: 700 } : undefined}>{r.per}</span>
+            <span style={Number(r.tPer) > 70 ? { color: '#d6455a', fontWeight: 700 } : undefined}>{r.per}</span>
           ),
         },
         { header: 'L→Cita', cell: (r) => `${r.tLC}%`, align: 'right' },
@@ -461,21 +461,21 @@ function TablaAsesor({ leads, ganados, advisors }: AsesoresProps) {
           header: 'C→Visita',
           align: 'right',
           cell: (r) => (
-            <span style={Number(r.tCV) > 60 ? { color: '#16a34a', fontWeight: 700 } : undefined}>{r.tCV}%</span>
+            <span style={Number(r.tCV) > 60 ? { color: '#0e8a59', fontWeight: 700 } : undefined}>{r.tCV}%</span>
           ),
         },
         {
           header: 'V→Sep',
           align: 'right',
           cell: (r) => (
-            <span style={Number(r.tVS) > 20 ? { color: '#16a34a', fontWeight: 700 } : undefined}>{r.tVS}%</span>
+            <span style={Number(r.tVS) > 20 ? { color: '#0e8a59', fontWeight: 700 } : undefined}>{r.tVS}%</span>
           ),
         },
         {
           header: 'Pérdida',
           align: 'right',
           cell: (r) => (
-            <span style={Number(r.tPer) > 70 ? { color: '#f43f5e', fontWeight: 700 } : undefined}>{r.tPer}%</span>
+            <span style={Number(r.tPer) > 70 ? { color: '#d6455a', fontWeight: 700 } : undefined}>{r.tPer}%</span>
           ),
         },
       ]}
@@ -489,7 +489,7 @@ function AgeDistribution({ leads }: { leads: Lead[] }) {
   // La distribución sólo tiene sentido sobre leads abiertos, como el original.
   const open = leads.filter(isAbierto);
   const buckets = ['< 1 hora', '1h–24h', '1–7 días', '7–30 días', '30d+'];
-  const colors = ['#4ade80', '#22d3ee', '#f59e0b', '#f97316', '#f43f5e'];
+  const colors = ['#12a56b', '#18a3c5', '#f2b134', '#e0662b', '#d6455a'];
   const counts = [0, 0, 0, 0, 0];
   open.forEach((l) => {
     counts[ageBucket(ageMinutes(l))] += 1;
@@ -594,14 +594,14 @@ function AgingTable({ leads, advisors }: { leads: Lead[]; advisors: PresentAdvis
       columns={[
         { header: 'Asesor', cell: (r) => <b>{r.name}</b> },
         { header: 'Abiertos', cell: (r) => r.total, align: 'right' },
-        { header: '<1h', cell: (r) => <span style={{ color: '#16a34a' }}>{r.bucks[0]}</span>, align: 'right' },
-        { header: '1h–24h', cell: (r) => <span style={{ color: '#22d3ee' }}>{r.bucks[1]}</span>, align: 'right' },
-        { header: '1–7d', cell: (r) => <span style={{ color: '#f59e0b' }}>{r.bucks[2]}</span>, align: 'right' },
-        { header: '7–30d', cell: (r) => <span style={{ color: '#f97316' }}>{r.bucks[3]}</span>, align: 'right' },
-        { header: '30d+', cell: (r) => <span style={{ color: '#f43f5e' }}>{r.bucks[4]}</span>, align: 'right' },
+        { header: '<1h', cell: (r) => <span style={{ color: '#0e8a59' }}>{r.bucks[0]}</span>, align: 'right' },
+        { header: '1h–24h', cell: (r) => <span style={{ color: '#18a3c5' }}>{r.bucks[1]}</span>, align: 'right' },
+        { header: '1–7d', cell: (r) => <span style={{ color: '#f2b134' }}>{r.bucks[2]}</span>, align: 'right' },
+        { header: '7–30d', cell: (r) => <span style={{ color: '#e0662b' }}>{r.bucks[3]}</span>, align: 'right' },
+        { header: '30d+', cell: (r) => <span style={{ color: '#d6455a' }}>{r.bucks[4]}</span>, align: 'right' },
         { header: 'Promedio', cell: (r) => <b style={{ color: ageColor(r.avg, false) }}>{fmtAge(r.avg)}</b>, align: 'right' },
-        { header: 'Más reciente', cell: (r) => <span style={{ color: '#16a34a' }}>{fmtAge(r.min)}</span>, align: 'right' },
-        { header: 'Más antiguo', cell: (r) => <span style={{ color: '#f43f5e' }}>{fmtAge(r.max)}</span>, align: 'right' },
+        { header: 'Más reciente', cell: (r) => <span style={{ color: '#0e8a59' }}>{fmtAge(r.min)}</span>, align: 'right' },
+        { header: 'Más antiguo', cell: (r) => <span style={{ color: '#d6455a' }}>{fmtAge(r.max)}</span>, align: 'right' },
       ]}
     />
   );
@@ -634,11 +634,11 @@ function PerdidaVsGanados({ leads, ganados, advisors }: AsesoresProps) {
             {
               label: '% Pérdida',
               data: rows.map((r) => r.tasaPer),
-              backgroundColor: rows.map((r) => (r.tasaPer > 70 ? '#f43f5e44' : r.tasaPer > 50 ? '#f59e0b44' : '#4ade8022')),
-              borderColor: rows.map((r) => (r.tasaPer > 70 ? '#f43f5e' : r.tasaPer > 50 ? '#f59e0b' : '#4ade80')),
+              backgroundColor: rows.map((r) => (r.tasaPer > 70 ? '#d6455a44' : r.tasaPer > 50 ? '#f2b13444' : '#12a56b22')),
+              borderColor: rows.map((r) => (r.tasaPer > 70 ? '#d6455a' : r.tasaPer > 50 ? '#f2b134' : '#12a56b')),
               borderWidth: 2,
             },
-            { label: '% Ganados/Sep', data: rows.map((r) => r.tasaGan), backgroundColor: '#4ade8044', borderColor: '#4ade80', borderWidth: 2 },
+            { label: '% Ganados/Sep', data: rows.map((r) => r.tasaGan), backgroundColor: '#12a56b44', borderColor: '#12a56b', borderWidth: 2 },
           ],
         }}
         options={{
@@ -699,8 +699,8 @@ function RazonesGenerales({ leads, lossReasons }: { leads: Lead[]; lossReasons: 
         />
       </ChartBox>
       <p className="mt-2 text-2xs text-muted">
-        <b style={{ color: '#4ade80' }}>{recuperables}</b> recuperables ·{' '}
-        <b style={{ color: '#f43f5e' }}>{duras}</b> pérdidas duras · de {lost.length} perdidos
+        <b style={{ color: '#12a56b' }}>{recuperables}</b> recuperables ·{' '}
+        <b style={{ color: '#d6455a' }}>{duras}</b> pérdidas duras · de {lost.length} perdidos
       </p>
     </>
   );

@@ -53,8 +53,8 @@ const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 /** Una línea por asesor. 12 colores: hoy son 11 asesores y crecen sin avisar. */
 const ADVISOR_COLORS = [
-  '#0e6680', '#f59e0b', '#6366f1', '#22c55e', '#e11d48', '#a855f7',
-  '#0891b2', '#c9a96e', '#84cc16', '#f97316', '#64748b', '#db2777',
+  '#073b52', '#f2b134', '#0b5f7e', '#12a56b', '#b8324a', '#8e5df2',
+  '#7fd6ea', '#ff8a3d', '#5fd8a5', '#e0662b', '#64748b', '#db2777',
 ];
 
 /** Últimos `n` meses `YYYY-MM` terminando en el mes de `today`, en orden. */
@@ -212,8 +212,8 @@ function Tendencia({ leads, ganados, today }: { leads: Lead[]; ganados: Lead[]; 
         type: 'bar',
         label: 'Leads',
         data: leadsPorMes,
-        backgroundColor: '#6366f144',
-        borderColor: '#6366f1',
+        backgroundColor: '#0b5f7e44',
+        borderColor: '#0b5f7e',
         borderWidth: 2,
         order: 2,
       },
@@ -221,8 +221,8 @@ function Tendencia({ leads, ganados, today }: { leads: Lead[]; ganados: Lead[]; 
         type: 'line',
         label: 'Ventas',
         data: cierresPorMes,
-        borderColor: '#c9a96e',
-        backgroundColor: '#c9a96e',
+        borderColor: '#ff8a3d',
+        backgroundColor: '#ff8a3d',
         borderWidth: 2,
         tension: 0.3,
         pointRadius: 5,
@@ -241,7 +241,7 @@ function Tendencia({ leads, ganados, today }: { leads: Lead[]; ganados: Lead[]; 
         position: 'right',
         beginAtZero: true,
         grid: { display: false },
-        ticks: { color: '#c9a96e' },
+        ticks: { color: '#ff8a3d' },
       },
     },
   };
@@ -295,9 +295,9 @@ function MixProyectos({ open }: { open: Lead[] }) {
 
 /** Semáforo por % de pipeline vencido. Los cortes vienen del dashboard original. */
 function semaforo(pctVencido: number): { color: string; label: string } {
-  if (pctVencido >= 70) return { color: '#ef4444', label: '🔴 Crítico' };
-  if (pctVencido >= 40) return { color: '#f59e0b', label: '🟡 Alerta' };
-  return { color: '#4ade80', label: '🟢 OK' };
+  if (pctVencido >= 70) return { color: '#d6455a', label: '🔴 Crítico' };
+  if (pctVencido >= 40) return { color: '#f2b134', label: '🟡 Alerta' };
+  return { color: '#12a56b', label: '🟢 OK' };
 }
 
 interface AlertRow {
@@ -340,7 +340,7 @@ function AlertasAsesor({ open, advisors, today }: { open: Lead[]; advisors: stri
         {
           header: 'Al día',
           align: 'right',
-          cell: (r) => <span className="font-semibold text-[#16a34a]">{r.counts.aldia || '–'}</span>,
+          cell: (r) => <span className="font-semibold text-[#0e8a59]">{r.counts.aldia || '–'}</span>,
         },
         {
           header: 'Gestión vencida',
@@ -398,7 +398,7 @@ function DetalleVencidos({
     [open, today],
   );
 
-  const diasColor = (d: number) => (d >= 5 ? '#ef4444' : d >= 3 ? '#f59e0b' : TICK_COLOR);
+  const diasColor = (d: number) => (d >= 5 ? '#d6455a' : d >= 3 ? '#f2b134' : TICK_COLOR);
 
   return (
     <DataTable
@@ -421,7 +421,7 @@ function DetalleVencidos({
         { header: 'Creación', cell: ({ l }) => <span className="text-dim">{l.date}</span> },
         {
           header: 'Próxima actividad',
-          cell: ({ l }) => <span className="font-semibold text-[#f59e0b]">{l.nextActivity}</span>,
+          cell: ({ l }) => <span className="font-semibold text-[#b7791f]">{l.nextActivity}</span>,
         },
         {
           header: 'Días vencido',
@@ -449,7 +449,7 @@ function Velocidad({ leads }: { leads: Lead[] }) {
     return { avg: Number((total / sub.length).toFixed(1)), n: sub.length };
   });
 
-  const color = (v: number) => (v > 10 ? '#ef4444' : v > 5 ? '#f59e0b' : '#4ade80');
+  const color = (v: number) => (v > 10 ? '#d6455a' : v > 5 ? '#f2b134' : '#12a56b');
 
   return (
     <ChartBox height={280}>
@@ -516,11 +516,11 @@ const CORTES_VELOCIDAD_H = [1, 6, 12, 24];
  * desaparecen en texto pequeño).
  */
 const BANDAS_VELOCIDAD = [
-  { label: 'Menos de 1 h', corto: '< 1 h', color: '#4ade80', texto: '#16a34a' },
-  { label: '1 a 6 h', corto: '1 a 6 h', color: '#a3e635', texto: '#65a30d' },
-  { label: '6 a 12 h', corto: '6 a 12 h', color: '#facc15', texto: '#ca8a04' },
-  { label: '12 a 24 h', corto: '12 a 24 h', color: '#fb923c', texto: '#ea580c' },
-  { label: 'Más de 24 h', corto: '> 24 h', color: '#ef4444', texto: '#dc2626' },
+  { label: 'Menos de 1 h', corto: '< 1 h', color: '#12a56b', texto: '#0e8a59' },
+  { label: '1 a 6 h', corto: '1 a 6 h', color: '#9be3c3', texto: '#65a30d' },
+  { label: '6 a 12 h', corto: '6 a 12 h', color: '#f2b134', texto: '#b7791f' },
+  { label: '12 a 24 h', corto: '12 a 24 h', color: '#ffb27a', texto: '#c4561f' },
+  { label: 'Más de 24 h', corto: '> 24 h', color: '#d6455a', texto: '#c23a4f' },
 ];
 
 interface ContactoRow {
@@ -577,9 +577,9 @@ function distribucionVelocidad(conteo: number[]): number[] {
 
 function semaforoContacto(medianaH: number | null): { color: string; label: string } {
   if (medianaH === null) return { color: '#94a3b8', label: '⚪ Muestra insuf.' };
-  if (medianaH <= 4) return { color: '#4ade80', label: '🟢 Rápido' };
-  if (medianaH <= 24) return { color: '#f59e0b', label: '🟡 En el día' };
-  return { color: '#ef4444', label: '🔴 Tardío' };
+  if (medianaH <= 4) return { color: '#12a56b', label: '🟢 Rápido' };
+  if (medianaH <= 24) return { color: '#f2b134', label: '🟡 En el día' };
+  return { color: '#d6455a', label: '🔴 Tardío' };
 }
 
 /** Agrega una lista de horas a la forma que consumen la tabla y los gráficos. */
@@ -1125,9 +1125,9 @@ const ROJO_TARDIO = BANDAS_VELOCIDAD[BANDAS_VELOCIDAD.length - 1].texto;
 type FiltroEstado = 'todos' | 'abiertos';
 
 function estadoTrato(l: Lead): { label: string; color: string } {
-  if (l.status === STATUS_WON) return { label: 'Ganado', color: '#16a34a' };
+  if (l.status === STATUS_WON) return { label: 'Ganado', color: '#0e8a59' };
   if (l.status === STATUS_LOST) return { label: 'Perdido', color: '#94a3b8' };
-  return { label: 'Abierto', color: '#0e6680' };
+  return { label: 'Abierto', color: '#073b52' };
 }
 
 function ContactoTardio({ leads, advisors }: { leads: Lead[]; advisors: string[] }) {
@@ -1287,7 +1287,7 @@ function ContactoTardio({ leads, advisors }: { leads: Lead[]; advisors: string[]
 // las dos cifras la que quedaría en duda es la del tablero.
 // ─────────────────────────────────────────────────────────────────────
 
-const CRUCE_COLOR = '#f59e0b';
+const CRUCE_COLOR = '#f2b134';
 
 /** Triángulo de exclamación. Hereda el color del texto que lo contiene. */
 function IconoCruce({ size = 12 }: { size?: number }) {
@@ -1629,7 +1629,7 @@ function MapaCalorReuniones({ meetings }: { meetings: Meeting[] }) {
   const columnas = [...horas, 'Sin hora'];
   const sinHora = columnas.length - 1;
 
-  const th = 'border border-border bg-[#f8f9fc] px-1.5 py-1 text-center text-2xs font-bold text-dim whitespace-nowrap';
+  const th = 'border border-border bg-[#f3f6fa] px-1.5 py-1 text-center text-2xs font-bold text-dim whitespace-nowrap';
   const totalCell = 'border border-border bg-bg px-1.5 py-1 text-center text-xs font-extrabold';
   const dashed = { borderLeft: '2px dashed #e2e5ef' };
 

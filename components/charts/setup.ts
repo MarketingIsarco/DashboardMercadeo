@@ -38,13 +38,21 @@ export function ensureChartsRegistered(): void {
   );
   Chart.defaults.font.family = "'Montserrat', sans-serif";
   Chart.defaults.font.size = 11;
-  Chart.defaults.color = '#6a6a82';
+  Chart.defaults.color = '#475569';
   Chart.defaults.maintainAspectRatio = false;
+  // Línea gráfica: tooltip en azul petróleo y barras con esquinas suaves.
+  Chart.defaults.plugins.tooltip.backgroundColor = '#073b52';
+  Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+  Chart.defaults.plugins.tooltip.bodyColor = '#e2f1f7';
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 10;
+  Chart.defaults.plugins.tooltip.titleFont = { family: "'Montserrat', sans-serif", weight: 'bold', size: 12 };
+  Chart.defaults.elements.bar.borderRadius = 4;
   registered = true;
 }
 
-export const GRID_COLOR = '#eaedf5';
-export const TICK_COLOR = '#6a6a82';
+export const GRID_COLOR = '#eef2f6';
+export const TICK_COLOR = '#475569';
 
 /** Ejes con la retícula tenue del diseño original. */
 export const baseScales = {

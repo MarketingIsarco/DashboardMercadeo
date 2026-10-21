@@ -43,7 +43,7 @@ export function Kpi({ label, value, meta, delta, deltaSuffix = '%', sub, size = 
       {showDelta ? (
         <span
           className={`mt-0.5 inline-block rounded-[10px] px-1.5 py-px text-[11px] font-semibold ${
-            up ? 'bg-green/20 text-[#16a34a]' : 'bg-red/20 text-red'
+            up ? 'bg-green/20 text-[#0e8a59]' : 'bg-red/20 text-red'
           }`}
         >
           {up ? '▲' : '▼'} {Math.abs(delta as number).toFixed(1)}

@@ -256,7 +256,7 @@ export function suficiencia(nucleo: number): Suficiencia {
       nivel: 'accionable',
       etiqueta: 'Buyer persona accionable',
       mensaje: 'La muestra admite cruzar dos variables y construir públicos de pauta.',
-      color: '#4ade80',
+      color: '#12a56b',
     };
   }
   if (nucleo >= PERFIL_UMBRALES.descriptivo) {
@@ -264,14 +264,14 @@ export function suficiencia(nucleo: number): Suficiencia {
       nivel: 'descriptivo',
       etiqueta: 'Perfil descriptivo',
       mensaje: 'Alcanza para leer cada variable por separado, no para cruzarlas.',
-      color: '#f59e0b',
+      color: '#f2b134',
     };
   }
   return {
     nivel: 'preliminar',
     etiqueta: 'Perfil preliminar',
     mensaje: 'No sirve todavía para construir públicos de pauta ni para decidir tipologías.',
-    color: '#f43f5e',
+    color: '#d6455a',
   };
 }
 

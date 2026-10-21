@@ -30,7 +30,7 @@ const CANAL_SEGMENTS: Array<{ value: 'todos' | 'digital' | 'no', label: string }
 ];
 
 function FieldLabel({ children }: { children: string }) {
-  return <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">{children}</span>;
+  return <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide text-accent before:inline-block before:h-1.5 before:w-1.5 before:rounded-full before:bg-accent-2 before:content-['']">{children}</span>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -65,8 +65,8 @@ export function FilterBar({
   const canal = filters.digital === null ? 'todos' : filters.digital ? 'digital' : 'no';
 
   return (
-    <div className="rounded-xl border border-border bg-card">
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-3 p-3">
+    <div className="rounded-[18px] border border-border bg-card shadow-panel">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3 px-5 py-4">
         <Field label="Periodo">
           <PeriodFilter filters={filters} onChange={set} months={months} years={years} />
         </Field>
@@ -140,7 +140,7 @@ export function FilterBar({
         </Field>
       </div>
 
-      <div className="border-t border-border px-3 py-2">
+      <div className="border-t border-dashed border-border px-5 py-2.5">
         <ActiveChips
           filters={filters}
           meta={meta}

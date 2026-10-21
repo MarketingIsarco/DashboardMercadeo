@@ -66,7 +66,7 @@ export function TasasMercado({
         {tasas.map((t, i) => (
           <div
             key={t.etapa}
-            className="rounded-lg border border-[#e8eaf2] bg-card px-3 py-2"
+            className="rounded-lg border border-[#e2e8f0] bg-card px-3 py-2"
             // El color del paso va en el borde izquierdo y en la cifra. Sólo en
             // la cifra se perdía en la retícula; sólo en el borde no se asocia
             // con el número.

@@ -90,27 +90,29 @@ export function DashboardShell() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex items-center gap-4 border-b border-border border-t-[3px] border-t-accent bg-accent-tint px-6 py-4 backdrop-blur">
-        <Image
-          src={logoIsarco}
-          alt="ISARCO"
-          priority
-          className="h-9 w-auto shrink-0"
-          sizes="120px"
-        />
+      <header className="sticky top-0 z-40 flex items-center gap-4 bg-grad-head px-6 py-3 shadow-[0_8px_24px_-10px_rgba(5,39,58,0.6)]">
+        <span className="flex shrink-0 items-center rounded-[14px] bg-white px-3.5 py-1.5 shadow-[0_4px_14px_rgba(0,0,0,0.25)]">
+          <Image
+            src={logoIsarco}
+            alt="ISARCO"
+            priority
+            className="h-9 w-auto shrink-0"
+            sizes="120px"
+          />
+        </span>
 
-        <span aria-hidden className="h-9 w-px shrink-0 bg-border" />
+        <span aria-hidden className="h-9 w-px shrink-0 bg-white/20" />
 
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-text">Dashboard Comercial</h1>
-          <p className="mt-0.5 text-xs text-dim">
+          <h1 className="text-xl font-extrabold tracking-[0.2px] text-white">Dashboard Comercial</h1>
+          <p className="mt-0.5 text-xs font-medium text-[#b9dbe8]">
             Pipeline CRM en vivo desde Pipedrive
             {data ? ` · ${data.total.toLocaleString('es-CO')} leads` : ''}
           </p>
         </div>
 
         {data ? (
-          <span className="text-2xs text-muted">
+          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-2xs font-semibold text-white">
             Actualizado{' '}
             {new Date(data.fetchedAt).toLocaleString('es-CO', {
               dateStyle: 'medium',
@@ -124,7 +126,7 @@ export function DashboardShell() {
           type="button"
           onClick={() => void load(true)}
           disabled={refreshing || loading}
-          className="pill disabled:opacity-50"
+          className="cursor-pointer rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-white/25 disabled:opacity-50"
         >
           {refreshing ? 'Actualizando…' : '↻ Actualizar'}
         </button>
@@ -135,27 +137,29 @@ export function DashboardShell() {
             await fetch('/api/auth', { method: 'DELETE' });
             window.location.href = '/login';
           }}
-          className="pill"
+          className="cursor-pointer rounded-full border border-white/25 bg-white/15 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-white/25"
         >
           Salir
         </button>
       </header>
 
-      <nav className="flex gap-1 border-b border-border bg-card px-6">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-[13px] font-semibold transition-colors ${
-              tab === t.id
-                ? 'border-accent text-accent'
-                : 'border-transparent text-dim hover:text-accent'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <nav className="mx-auto mt-5 max-w-[1400px] px-6">
+        <div className="inline-flex flex-wrap gap-1.5 rounded-2xl border border-border bg-card p-1.5 shadow-panel">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`rounded-[11px] px-5 py-2.5 text-[13px] font-bold tracking-[0.2px] transition-all duration-150 ${
+                tab === t.id
+                  ? 'bg-grad text-white shadow-tab'
+                  : 'text-dim hover:bg-panel2 hover:text-accent'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-6 py-5">

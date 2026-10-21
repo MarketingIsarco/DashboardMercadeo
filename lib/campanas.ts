@@ -119,10 +119,10 @@ export function desempenoPor(
 export const TRAMOS = ['Visita o más', 'Cita', 'En gestión', 'Perdido sin cita'] as const;
 export type Tramo = (typeof TRAMOS)[number];
 export const TRAMO_COLOR: Record<Tramo, string> = {
-  'Visita o más': '#4ade80',
-  Cita: '#f59e0b',
-  'En gestión': '#6366f1',
-  'Perdido sin cita': '#f87171',
+  'Visita o más': '#12a56b',
+  Cita: '#f2b134',
+  'En gestión': '#0b5f7e',
+  'Perdido sin cita': '#e57c8c',
 };
 
 export function tramoDe(l: Lead): Tramo {

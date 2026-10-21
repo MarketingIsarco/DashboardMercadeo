@@ -80,7 +80,7 @@ const HEAT: Record<number, string> = {
 
 function Delta({ v }: { v: ReturnType<typeof variacion> }) {
   if (!v) return <span className="text-muted">—</span>;
-  const cls = v.plano ? 'text-muted' : v.bueno ? 'text-[#16a34a]' : 'text-red';
+  const cls = v.plano ? 'text-muted' : v.bueno ? 'text-[#0e8a59]' : 'text-red';
   const flecha = v.plano ? '→' : v.pct > 0 ? '↑' : '↓';
   return (
     <span className={`font-semibold ${cls}`}>

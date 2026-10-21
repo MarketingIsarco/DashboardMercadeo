@@ -59,11 +59,11 @@ export function Popover({
         aria-haspopup="dialog"
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+        className={`flex items-center gap-1.5 rounded-[10px] border px-2.5 py-1.5 text-xs font-medium transition-colors ${
           isActive
             ? 'border-accent-border bg-accent-soft text-accent'
-            : 'border-border bg-card text-dim hover:border-accent-border hover:text-accent'
-        } ${open ? 'ring-2 ring-accent/20' : ''}`}
+            : 'border-border bg-panel2 text-text hover:border-accent-2 hover:text-accent'
+        } ${open ? 'ring-[3px] ring-accent-2/20' : ''}`}
       >
         <span>{label}</span>
         {count ? (

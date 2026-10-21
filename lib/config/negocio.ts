@@ -194,8 +194,8 @@ export const CRM_UTC_OFFSET_HOURS = -5;
 
 /** Paleta por índice de `PROJECTS`. */
 export const PROJECT_COLORS = [
-  '#6366f1', '#f59e0b', '#a78bfa', '#22d3ee',
-  '#4ade80', '#c9a96e', '#f43f5e', '#94a3b8',
+  '#0b5f7e', '#f2b134', '#8a6bbf', '#18a3c5',
+  '#12a56b', '#ff8a3d', '#d6455a', '#94a3b8',
 ];
 
 /**
@@ -338,7 +338,7 @@ export const INVERSION_RUBROS: Record<Bolsa, number[][]> = {
 
 /** Colores de la partición digital / no-digital. Se usan en chart y tabla. */
 export const DIGITAL_COLOR = '#60a5fa';
-export const NO_DIGITAL_COLOR = '#fb923c';
+export const NO_DIGITAL_COLOR = '#ffb27a';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -552,12 +552,12 @@ export const PERFIL_SESGO_PCT = 40;
 
 /** Paleta de las categorías de perfil. 12 tonos, se repite si hacen falta más. */
 export const PERFIL_COLORS = [
-  '#c9a96e', '#6366f1', '#22d3ee', '#f59e0b', '#8b5cf6', '#4ade80',
-  '#f43f5e', '#0ea5e9', '#fb923c', '#a3e635', '#e879f9', '#64748b',
+  '#ff8a3d', '#0b5f7e', '#18a3c5', '#f2b134', '#6d4fa8', '#12a56b',
+  '#d6455a', '#5b8def', '#ffb27a', '#9be3c3', '#c7b2fb', '#64748b',
 ];
 
 export const SIN_PERFIL = 'Sin diligenciar';
-export const SIN_PERFIL_COLOR = '#9090a8';
+export const SIN_PERFIL_COLOR = '#94a3b8';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -602,11 +602,11 @@ export interface TasaMercado {
 }
 
 export const TASAS_MERCADO: TasaMercado[] = [
-  { etapa: 'Contactado', corto: 'Contacto', digital: 67, noDigital: 95, color: '#6366f1' },
-  { etapa: 'Cita agendada', corto: 'Cita', digital: 20, noDigital: 80, color: '#22d3ee' },
-  { etapa: 'Visitado', corto: 'Visita', digital: 55, noDigital: 95, color: '#f59e0b' },
-  { etapa: 'Negociación', corto: 'Negociación', digital: 25, noDigital: 28, color: '#f43f5e' },
-  { etapa: 'Separación', corto: 'Separación', digital: 67, noDigital: 77, color: '#4ade80' },
+  { etapa: 'Contactado', corto: 'Contacto', digital: 67, noDigital: 95, color: '#0b5f7e' },
+  { etapa: 'Cita agendada', corto: 'Cita', digital: 20, noDigital: 80, color: '#18a3c5' },
+  { etapa: 'Visitado', corto: 'Visita', digital: 55, noDigital: 95, color: '#f2b134' },
+  { etapa: 'Negociación', corto: 'Negociación', digital: 25, noDigital: 28, color: '#d6455a' },
+  { etapa: 'Separación', corto: 'Separación', digital: 67, noDigital: 77, color: '#12a56b' },
 ];
 
 /**
@@ -774,25 +774,25 @@ export const SOURCE_COLORS: Record<string, string> = {
   Facebook: '#1877f2',
   Whatsapp: '#25d366',
   WhatsApp: '#25d366',
-  'Sala de Negocios': '#f97316',
-  'Pagina Web': '#6366f1',
-  'Pág. Web': '#6366f1',
+  'Sala de Negocios': '#e0662b',
+  'Pagina Web': '#0b5f7e',
+  'Pág. Web': '#0b5f7e',
   Google: '#ea4335',
-  Referidos: '#a78bfa',
+  Referidos: '#8a6bbf',
   'Redes Sociales': '#ec4899',
-  'Activaciones de marca': '#14b8a6',
-  Broker: '#8b5cf6',
-  'Valla Comercial': '#84cc16',
-  'Campaña Email': '#0ea5e9',
-  'Finca Raiz': '#f59e0b',
+  'Activaciones de marca': '#1f9e8f',
+  Broker: '#6d4fa8',
+  'Valla Comercial': '#5fd8a5',
+  'Campaña Email': '#5b8def',
+  'Finca Raiz': '#f2b134',
   Proppit: '#10b981',
-  'Por definir': '#666666',
+  'Por definir': '#64748b',
 };
 export const SOURCE_FALLBACK = '#94a3b8';
 
 export const ADVISOR_COLORS = [
-  '#e1306c', '#1877f2', '#25d366', '#f59e0b', '#6366f1',
-  '#ea4335', '#a78bfa', '#14b8a6', '#f97316', '#0ea5e9', '#84cc16',
+  '#e1306c', '#1877f2', '#25d366', '#f2b134', '#0b5f7e',
+  '#ea4335', '#8a6bbf', '#1f9e8f', '#e0662b', '#5b8def', '#5fd8a5',
 ];
 
 export const LOSS_GROUPS: LossGroup[] = [
@@ -813,11 +813,11 @@ export const LOSS_GROUP_LABEL: Record<LossGroup, string> = {
 };
 
 export const LOSS_GROUP_COLORS: Record<LossGroup, string> = {
-  Contactabilidad: '#f43f5e',
-  Interes: '#f59e0b',
-  Producto: '#6366f1',
-  'Mal segmento': '#22d3ee',
-  Otro: '#888888',
+  Contactabilidad: '#d6455a',
+  Interes: '#f2b134',
+  Producto: '#0b5f7e',
+  'Mal segmento': '#18a3c5',
+  Otro: '#94a3b8',
 };
 
 /**
@@ -829,7 +829,7 @@ export const LOSS_GROUP_COLORS: Record<LossGroup, string> = {
  * motivos no sumaba el total de perdidos.
  */
 export const SIN_MOTIVO = 'Sin motivo registrado';
-export const SIN_MOTIVO_COLOR = '#9090a8';
+export const SIN_MOTIVO_COLOR = '#94a3b8';
 
 export const MONTH_SHORT = [
   'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',

@@ -80,7 +80,7 @@ import { CONTENT_REEL, CONTENT_STATIC, STATUS_LOST, STATUS_OPEN } from '@/lib/ty
 // ── Constantes locales ───────────────────────────────────────────────
 // Un color por etapa del embudo (7). El HTML sólo definía 6 y dejaba la última
 // etapa con color `undefined`; aquí la completamos con el dorado de marca.
-const STAGE_COLORS = ['#6366f1', '#8b5cf6', '#f59e0b', '#22d3ee', '#f97316', '#4ade80', '#c9a96e'];
+const STAGE_COLORS = ['#0b5f7e', '#6d4fa8', '#f2b134', '#18a3c5', '#e0662b', '#12a56b', '#ff8a3d'];
 
 function sourceColor(name: string): string {
   return SOURCE_COLORS[name] ?? SOURCE_FALLBACK;
@@ -367,9 +367,9 @@ function PipelineVivo({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
           data={{
             labels: [...STAGES],
             datasets: [
-              { label: 'Abierto', data: abierto, backgroundColor: '#6366f166', borderColor: '#6366f1', borderWidth: 1 },
-              { label: 'Perdido', data: perdido, backgroundColor: '#f43f5e66', borderColor: '#f43f5e', borderWidth: 1 },
-              { label: 'Ganado', data: ganado, backgroundColor: '#4ade8066', borderColor: '#4ade80', borderWidth: 1 },
+              { label: 'Abierto', data: abierto, backgroundColor: '#0b5f7e66', borderColor: '#0b5f7e', borderWidth: 1 },
+              { label: 'Perdido', data: perdido, backgroundColor: '#d6455a66', borderColor: '#d6455a', borderWidth: 1 },
+              { label: 'Ganado', data: ganado, backgroundColor: '#12a56b66', borderColor: '#12a56b', borderWidth: 1 },
             ],
           }}
           options={{
@@ -477,8 +477,8 @@ function Timeline({
       label: 'Leads',
       data: chart.counts,
       fill: true,
-      backgroundColor: '#6366f115',
-      borderColor: '#6366f1',
+      backgroundColor: '#0b5f7e15',
+      borderColor: '#0b5f7e',
       tension: 0.4,
       pointRadius: 3,
       order: 3,
@@ -488,7 +488,7 @@ function Timeline({
       data: chart.vis,
       fill: false,
       backgroundColor: 'transparent',
-      borderColor: '#4ade80',
+      borderColor: '#12a56b',
       tension: 0.4,
       pointRadius: 3,
       borderWidth: 2,
@@ -499,7 +499,7 @@ function Timeline({
       ? [{
           label: chart.metaLeadsLabel,
           data: chart.counts.map(() => chart.metaLeads as number),
-          borderColor: '#f59e0b',
+          borderColor: '#f2b134',
           backgroundColor: 'transparent',
           borderWidth: 2,
           borderDash: [6, 4],
@@ -515,7 +515,7 @@ function Timeline({
           // Verde oscuro, no el mismo verde al 53%: la meta se dibuja arriba
           // del todo y en claro se pierde contra el fondo, que es justo donde
           // hay que poder verla.
-          borderColor: '#22a55b',
+          borderColor: '#12a56b',
           backgroundColor: 'transparent',
           borderWidth: 1.5,
           borderDash: [5, 4],
@@ -559,8 +559,8 @@ function Timeline({
                 position: 'left',
                 beginAtZero: true,
                 grid: { color: GRID_COLOR },
-                ticks: { color: '#6366f1' },
-                title: { display: true, text: 'Leads', color: '#6366f1', font: { size: 10 } },
+                ticks: { color: '#0b5f7e' },
+                title: { display: true, text: 'Leads', color: '#0b5f7e', font: { size: 10 } },
               },
               y2: {
                 type: 'linear',
@@ -569,8 +569,8 @@ function Timeline({
                 // Sin retícula propia: dos juegos de líneas horizontales sobre
                 // el mismo lienzo se leen como una sola y confunden la lectura.
                 grid: { display: false },
-                ticks: { color: '#22a55b' },
-                title: { display: true, text: 'Visitas', color: '#22a55b', font: { size: 10 } },
+                ticks: { color: '#12a56b' },
+                title: { display: true, text: 'Visitas', color: '#12a56b', font: { size: 10 } },
               },
             },
           }}
@@ -751,10 +751,10 @@ function Comparativo({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
         data={{
           labels: ta.keys.map(monthLabel),
           datasets: [
-            { label: 'Leads', data: buckets.map((b) => b.leads), backgroundColor: '#6366f133', borderColor: '#6366f1', borderWidth: 2, order: 4 },
-            { label: 'Citas', data: buckets.map((b) => b.citas), backgroundColor: '#22d3ee33', borderColor: '#22d3ee', borderWidth: 2, order: 3 },
-            { label: 'Visitas', data: buckets.map((b) => b.vis), backgroundColor: '#4ade8033', borderColor: '#4ade80', borderWidth: 2, order: 2 },
-            { label: 'Sep+Cierres', data: buckets.map((b) => b.gan), backgroundColor: '#c9a96e33', borderColor: '#c9a96e', borderWidth: 2, order: 1 },
+            { label: 'Leads', data: buckets.map((b) => b.leads), backgroundColor: '#0b5f7e33', borderColor: '#0b5f7e', borderWidth: 2, order: 4 },
+            { label: 'Citas', data: buckets.map((b) => b.citas), backgroundColor: '#18a3c533', borderColor: '#18a3c5', borderWidth: 2, order: 3 },
+            { label: 'Visitas', data: buckets.map((b) => b.vis), backgroundColor: '#12a56b33', borderColor: '#12a56b', borderWidth: 2, order: 2 },
+            { label: 'Sep+Cierres', data: buckets.map((b) => b.gan), backgroundColor: '#ff8a3d33', borderColor: '#ff8a3d', borderWidth: 2, order: 1 },
           ],
         }}
         options={{
@@ -799,8 +799,8 @@ function ConvFuente({ leads, sources }: { leads: Lead[]; sources: string[] }) {
           data={{
             labels: rows.map((r) => r.name),
             datasets: [
-              { label: '% Lead→Cita', data: rows.map((r) => r.pCita), backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
-              { label: '% Lead→Visita', data: rows.map((r) => r.pVis), backgroundColor: '#22d3ee44', borderColor: '#22d3ee', borderWidth: 2 },
+              { label: '% Lead→Cita', data: rows.map((r) => r.pCita), backgroundColor: '#0b5f7e44', borderColor: '#0b5f7e', borderWidth: 2 },
+              { label: '% Lead→Visita', data: rows.map((r) => r.pVis), backgroundColor: '#18a3c544', borderColor: '#18a3c5', borderWidth: 2 },
             ],
           }}
           options={{
@@ -842,8 +842,8 @@ function StageSrc({ leads, sources }: { leads: Lead[]; sources: string[] }) {
   const perdidoDataset = {
     label: 'Perdido',
     data: sources.map((_, i) => leads.filter((l) => l.source === i && l.status === STATUS_LOST).length),
-    backgroundColor: '#f43f5e44',
-    borderColor: '#f43f5e',
+    backgroundColor: '#d6455a44',
+    borderColor: '#d6455a',
     borderWidth: 1,
   };
 
@@ -892,8 +892,8 @@ function CampType({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
           data={{
             labels: metrics,
             datasets: [
-              { label: 'Reel', data: series(reel, gReel), backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
-              { label: 'Estática', data: series(esta, gEsta), backgroundColor: '#22d3ee44', borderColor: '#22d3ee', borderWidth: 2 },
+              { label: 'Reel', data: series(reel, gReel), backgroundColor: '#0b5f7e44', borderColor: '#0b5f7e', borderWidth: 2 },
+              { label: 'Estática', data: series(esta, gEsta), backgroundColor: '#18a3c544', borderColor: '#18a3c5', borderWidth: 2 },
             ],
           }}
           options={{
@@ -973,8 +973,8 @@ function DigitalMonth({
         data={{
           labels: ta.keys.map(monthLabel),
           datasets: [
-            { label: 'Digital', data: dig, backgroundColor: '#6366f144', borderColor: '#6366f1', borderWidth: 2 },
-            { label: 'No Digital', data: noDig, backgroundColor: '#f59e0b44', borderColor: '#f59e0b', borderWidth: 2 },
+            { label: 'Digital', data: dig, backgroundColor: '#0b5f7e44', borderColor: '#0b5f7e', borderWidth: 2 },
+            { label: 'No Digital', data: noDig, backgroundColor: '#f2b13444', borderColor: '#f2b134', borderWidth: 2 },
           ],
         }}
         options={{
@@ -1106,7 +1106,7 @@ function TablaPauta({
   const tasaCita = (f: FilaPauta) => {
     const v = pctNum(f.citas, f.leads);
     const comparable = !f.sinDato && f.leads >= PAUTA_MIN_LEADS;
-    const color = !comparable ? undefined : v >= promedio ? '#16a34a' : '#dc2626';
+    const color = !comparable ? undefined : v >= promedio ? '#0e8a59' : '#c23a4f';
     return (
       <span className="font-semibold" style={{ color }}>
         {f.leads ? `${v.toFixed(1)}%` : '–'}
@@ -1247,8 +1247,8 @@ function LossSection({
             data={{
               labels: ta.keys.map(monthLabel),
               datasets: [
-                { label: 'Recuperables', data: rec.map((x) => x.rec), backgroundColor: '#f59e0b44', borderColor: '#f59e0b', borderWidth: 2 },
-                { label: 'Duras', data: rec.map((x) => x.hard), backgroundColor: '#f43f5e44', borderColor: '#f43f5e', borderWidth: 2 },
+                { label: 'Recuperables', data: rec.map((x) => x.rec), backgroundColor: '#f2b13444', borderColor: '#f2b134', borderWidth: 2 },
+                { label: 'Duras', data: rec.map((x) => x.hard), backgroundColor: '#d6455a44', borderColor: '#d6455a', borderWidth: 2 },
               ],
             }}
             options={{
@@ -1439,7 +1439,7 @@ function Inversion({
         type: 'line' as const,
         label: 'CPL Digital',
         data: chart.cpl as unknown as number[],
-        borderColor: '#f43f5e',
+        borderColor: '#d6455a',
         backgroundColor: 'rgba(244,63,94,0.12)',
         yAxisID: 'y2',
         tension: 0.3,
@@ -1478,8 +1478,8 @@ function Inversion({
         position: 'right',
         beginAtZero: true,
         grid: { display: false },
-        ticks: { color: '#f43f5e' },
-        title: { display: true, text: 'CPL Digital ($)', color: '#f43f5e', font: { size: 10 } },
+        ticks: { color: '#d6455a' },
+        title: { display: true, text: 'CPL Digital ($)', color: '#d6455a', font: { size: 10 } },
       },
     },
   };
@@ -1738,7 +1738,7 @@ function BuyerPersona({ filtered, ganados, meta }: { filtered: Lead[]; ganados: 
       </KpiGrid>
 
       {sesgo ? (
-        <p className="mt-3 rounded-md border border-[#f59e0b55] bg-[#f59e0b14] px-3 py-2 text-2xs leading-snug text-dim">
+        <p className="mt-3 rounded-md border border-[#f2b13455] bg-[#f2b13414] px-3 py-2 text-2xs leading-snug text-dim">
           <b>Sesgo de selección.</b> Con {cob.indice.toFixed(1)}% de perfilamiento, lo que sigue describe a quien el
           asesor <i>decidió</i> perfilar, no a quien consulta por el proyecto. Sirve para orientar hipótesis de pauta,
           no para cerrar una definición de público.
@@ -1746,7 +1746,7 @@ function BuyerPersona({ filtered, ganados, meta }: { filtered: Lead[]; ganados: 
       ) : null}
 
       {cob.ausentes.length ? (
-        <p className="mt-2 rounded-md border border-[#f43f5e55] bg-[#f43f5e14] px-3 py-2 text-2xs leading-snug text-dim">
+        <p className="mt-2 rounded-md border border-[#d6455a55] bg-[#d6455a14] px-3 py-2 text-2xs leading-snug text-dim">
           <b>Campos no encontrados en Pipedrive:</b>{' '}
           {cob.ausentes.map((i) => PERFIL_CAMPOS[i].label).join(', ')}. Suele significar que el campo se borró y se
           volvió a crear en el CRM con otro nombre. Ajusta los <code>alias</code> de <code>PERFIL_CAMPOS</code> en
@@ -1805,7 +1805,7 @@ function PerfilMensual({ leads }: { leads: Lead[] }) {
         type: 'bar' as const,
         label: 'Leads',
         data: meses.map((m) => m.total),
-        backgroundColor: '#6366f166',
+        backgroundColor: '#0b5f7e66',
         yAxisID: 'y',
         order: 2,
       },
@@ -1821,7 +1821,7 @@ function PerfilMensual({ leads }: { leads: Lead[] }) {
         type: 'line' as const,
         label: 'Índice de perfilamiento',
         data: meses.map((m) => Number(m.indice.toFixed(1))),
-        borderColor: '#f43f5e',
+        borderColor: '#d6455a',
         backgroundColor: 'rgba(244,63,94,0.12)',
         yAxisID: 'y2',
         tension: 0.3,
@@ -1857,8 +1857,8 @@ function PerfilMensual({ leads }: { leads: Lead[] }) {
         position: 'right',
         beginAtZero: true,
         grid: { display: false },
-        ticks: { color: '#f43f5e', callback: (v) => `${v}%` },
-        title: { display: true, text: 'Perfilamiento', color: '#f43f5e', font: { size: 10 } },
+        ticks: { color: '#d6455a', callback: (v) => `${v}%` },
+        title: { display: true, text: 'Perfilamiento', color: '#d6455a', font: { size: 10 } },
       },
     },
   };
@@ -1879,7 +1879,7 @@ function PerfilMensual({ leads }: { leads: Lead[] }) {
 function PerfilCard({ dist }: { dist: Distribucion }) {
   if (dist.ausente) {
     return (
-      <div className="rounded-lg border border-dashed border-[#d7dbe8] p-4">
+      <div className="rounded-lg border border-dashed border-[#cbd5e1] p-4">
         <div className="text-xs font-semibold text-dim">{dist.label}</div>
         <p className="mt-2 text-2xs leading-snug text-muted">
           El campo no existe hoy en Pipedrive con ninguno de los nombres que el dashboard busca.
@@ -1890,7 +1890,7 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
 
   if (!dist.conDato) {
     return (
-      <div className="rounded-lg border border-[#e8eaf2] p-4">
+      <div className="rounded-lg border border-[#e2e8f0] p-4">
         <div className="text-xs font-semibold text-dim">{dist.label}</div>
         <p className="mt-2 text-2xs leading-snug text-muted">
           Ningún trato del recorte tiene este campo diligenciado.
@@ -1904,7 +1904,7 @@ function PerfilCard({ dist }: { dist: Distribucion }) {
   const esRanking = dist.viz === 'ranking';
 
   return (
-    <div className="rounded-lg border border-[#e8eaf2] p-4">
+    <div className="rounded-lg border border-[#e2e8f0] p-4">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-semibold text-dim">{dist.label}</span>
         <span className="text-2xs text-muted">n = {dist.conDato.toLocaleString('es-CO')}</span>
@@ -2064,7 +2064,7 @@ function ExploradorPerfil({ leads, ganados, meta }: { leads: Lead[]; ganados: Le
         cruce, no un problema del filtro.
       </p>
 
-      <div className="rounded-lg border border-[#e8eaf2] p-3">
+      <div className="rounded-lg border border-[#e2e8f0] p-3">
         <div className="mb-1 flex items-baseline justify-between gap-2">
           <span className="text-2xs font-semibold uppercase tracking-wide text-dim">
             Variables ({sel.length} de 3)

@@ -51,7 +51,7 @@ import type { TabProps } from '@/lib/selectors';
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const ESTADO_COLOR = { abiertos: '#6366f1', ganados: '#4ade80', perdidos: '#f43f5e' };
+const ESTADO_COLOR = { abiertos: '#0b5f7e', ganados: '#12a56b', perdidos: '#d6455a' };
 
 export function ComercialInmTab({ filtered, ganados, filters, meta }: TabProps) {
   const leads = useMemo(() => filtered.filter(esInmobiliaria), [filtered]);
@@ -249,7 +249,7 @@ function PanelAsesor({ leads, meta }: { leads: TabProps['filtered']; meta: TabPr
 
       <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <Dona titulo="Tipo de Inmueble" dist={tipo} />
-        <Dona titulo="Entrega con Acabados" dist={acab} colores={['#4ade80', '#94a3b8']} />
+        <Dona titulo="Entrega con Acabados" dist={acab} colores={['#12a56b', '#94a3b8']} />
         <Histograma titulo="Presupuesto" dist={presupuesto} color={PERFIL_COLORS[0]} />
         <Histograma titulo="Área Requerida" dist={area} color={PERFIL_COLORS[2]} />
       </div>
@@ -350,7 +350,7 @@ function Histograma({ titulo, dist, color }: { titulo: string; dist: Distribucio
 
 const ESTADO_PILL: Record<FilaCliente['estado'], string> = {
   Abierto: 'bg-accent-soft text-accent',
-  Ganado: 'bg-green/20 text-[#16a34a]',
+  Ganado: 'bg-green/20 text-[#0e8a59]',
   Perdido: 'bg-red/20 text-red',
 };
 

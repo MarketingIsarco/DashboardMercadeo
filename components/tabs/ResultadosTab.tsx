@@ -31,7 +31,7 @@ import {
 import type { TabProps } from '@/lib/selectors';
 import type { Lead, SaleDeal } from '@/lib/types';
 
-const FUNNEL_COLORS = ['#6366f1', '#a78bfa', '#f59e0b', '#4ade80', '#22d3ee', '#c9a96e'];
+const FUNNEL_COLORS = ['#0b5f7e', '#8a6bbf', '#f2b134', '#12a56b', '#18a3c5', '#ff8a3d'];
 
 function sourceColor(name: string): string {
   return SOURCE_COLORS[name] ?? SOURCE_FALLBACK;
@@ -312,8 +312,8 @@ function DigitalDonut({ ventas, digitalSources }: { ventas: Lead[]; digitalSourc
           datasets: [
             {
               data: [dig, noDig],
-              backgroundColor: ['#6366f166', '#f59e0b66'],
-              borderColor: ['#6366f1', '#f59e0b'],
+              backgroundColor: ['#0b5f7e66', '#f2b13466'],
+              borderColor: ['#0b5f7e', '#f2b134'],
               borderWidth: 2,
             },
           ],
@@ -356,8 +356,8 @@ function SourceWinLoss({
         data={{
           labels: rows.map((r) => r.name),
           datasets: [
-            { label: 'Ventas', data: rows.map((r) => r.v), backgroundColor: '#4ade8066', borderColor: '#4ade80', borderWidth: 2 },
-            { label: 'Pérdidas', data: rows.map((r) => r.p), backgroundColor: '#f43f5e44', borderColor: '#f43f5e', borderWidth: 2 },
+            { label: 'Ventas', data: rows.map((r) => r.v), backgroundColor: '#12a56b66', borderColor: '#12a56b', borderWidth: 2 },
+            { label: 'Pérdidas', data: rows.map((r) => r.p), backgroundColor: '#d6455a44', borderColor: '#d6455a', borderWidth: 2 },
           ],
         }}
         options={{
@@ -411,7 +411,7 @@ function SalesByProject({ ventas, projects }: { ventas: Lead[]; projects: string
     .map((name, i) => ({ name, n: ventas.filter((l) => l.project === i).length }))
     .filter((r) => r.n > 0);
   const total = ventas.length || 1;
-  const palette = ['#0e6680', '#c9a96e', '#6366f1', '#22d3ee', '#4ade80', '#f97316', '#a78bfa', '#f43f5e'];
+  const palette = ['#073b52', '#ff8a3d', '#0b5f7e', '#18a3c5', '#12a56b', '#e0662b', '#8a6bbf', '#d6455a'];
 
   return (
     <ChartBox>
@@ -467,15 +467,15 @@ function TrendChart({
         data={{
           labels: ta.keys.map(monthLabel),
           datasets: [
-            { type: 'bar' as const, label: 'Ventas', data: buckets.map((b) => b.v), backgroundColor: '#c9a96e44', borderColor: '#c9a96e', borderWidth: 2, order: 3 },
-            { type: 'line' as const, label: 'Visitas', data: buckets.map((b) => b.vis), borderColor: '#4ade80', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3, order: 1 },
-            { type: 'line' as const, label: 'Citas', data: buckets.map((b) => b.c), borderColor: '#22d3ee', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3, order: 1 },
+            { type: 'bar' as const, label: 'Ventas', data: buckets.map((b) => b.v), backgroundColor: '#ff8a3d44', borderColor: '#ff8a3d', borderWidth: 2, order: 3 },
+            { type: 'line' as const, label: 'Visitas', data: buckets.map((b) => b.vis), borderColor: '#12a56b', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3, order: 1 },
+            { type: 'line' as const, label: 'Citas', data: buckets.map((b) => b.c), borderColor: '#18a3c5', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, tension: 0.3, order: 1 },
             ...(goalCierres !== null
               ? [{
                   type: 'line' as const,
                   label: 'Meta ventas',
                   data: buckets.map(() => goalCierres),
-                  borderColor: '#c9a96eaa',
+                  borderColor: '#ff8a3daa',
                   borderDash: [5, 4],
                   pointRadius: 0,
                   borderWidth: 1.5,
@@ -553,14 +553,14 @@ function WinLossTrend({
         data={{
           labels: ta.keys.map(monthLabel),
           datasets: [
-            { type: 'bar' as const, label: 'Perdidos', data: buckets.map((b) => b.p), backgroundColor: '#f43f5e44', borderColor: '#f43f5e', borderWidth: 2, order: 3, yAxisID: 'y' },
-            { type: 'line' as const, label: 'Ventas', data: buckets.map((b) => b.v), borderColor: '#4ade80', backgroundColor: '#4ade8015', fill: false, borderWidth: 2.5, pointRadius: 5, pointBackgroundColor: '#4ade80', pointBorderColor: '#fff', pointBorderWidth: 2, tension: 0.3, order: 1, yAxisID: 'y1' },
+            { type: 'bar' as const, label: 'Perdidos', data: buckets.map((b) => b.p), backgroundColor: '#d6455a44', borderColor: '#d6455a', borderWidth: 2, order: 3, yAxisID: 'y' },
+            { type: 'line' as const, label: 'Ventas', data: buckets.map((b) => b.v), borderColor: '#12a56b', backgroundColor: '#12a56b15', fill: false, borderWidth: 2.5, pointRadius: 5, pointBackgroundColor: '#12a56b', pointBorderColor: '#fff', pointBorderWidth: 2, tension: 0.3, order: 1, yAxisID: 'y1' },
             ...(goalCierres !== null
               ? [{
                   type: 'line' as const,
                   label: 'Meta ventas',
                   data: buckets.map(() => goalCierres),
-                  borderColor: '#c9a96e',
+                  borderColor: '#ff8a3d',
                   borderDash: [5, 4],
                   pointRadius: 0,
                   borderWidth: 1.5,
@@ -578,8 +578,8 @@ function WinLossTrend({
             y: {
               beginAtZero: true,
               grid: { color: GRID_COLOR },
-              ticks: { color: '#f43f5e' },
-              title: { display: true, text: 'Perdidos', color: '#f43f5e', font: { size: 10 } },
+              ticks: { color: '#d6455a' },
+              title: { display: true, text: 'Perdidos', color: '#d6455a', font: { size: 10 } },
             },
             // Eje propio: las ventas son ~1-2 órdenes de magnitud menores que
             // las pérdidas y compartir escala las aplastaría contra el cero.
@@ -588,8 +588,8 @@ function WinLossTrend({
               position: 'right' as const,
               beginAtZero: true,
               grid: { drawOnChartArea: false },
-              ticks: { color: '#4ade80', precision: 0 },
-              title: { display: true, text: 'Ventas', color: '#4ade80', font: { size: 10 } },
+              ticks: { color: '#12a56b', precision: 0 },
+              title: { display: true, text: 'Ventas', color: '#12a56b', font: { size: 10 } },
             },
           },
         }}
@@ -620,7 +620,7 @@ function SalesTable({ sales, ventas }: { sales: SaleDeal[]; ventas: Lead[] }) {
           {
             header: 'Canal',
             cell: (r) => (
-              <span style={{ color: r.isDigital ? '#6366f1' : '#f59e0b' }}>
+              <span style={{ color: r.isDigital ? '#0b5f7e' : '#f2b134' }}>
                 {r.isDigital ? 'Digital' : 'No digital'}
               </span>
             ),
@@ -637,10 +637,10 @@ function SalesTable({ sales, ventas }: { sales: SaleDeal[]; ventas: Lead[] }) {
                 className="rounded-full px-2 py-0.5 text-2xs font-semibold"
                 style={
                   r.status === 'Abierto'
-                    ? { background: '#f59e0b22', color: '#f59e0b' }
+                    ? { background: '#fff1d0', color: '#b7791f' }
                     : r.status === 'Perdido'
-                      ? { background: '#f43f5e22', color: '#f43f5e' }
-                      : { background: '#4ade8022', color: '#16a34a' }
+                      ? { background: '#d6455a22', color: '#d6455a' }
+                      : { background: '#dcf7ea', color: '#12a56b' }
                 }
               >
                 {r.status}
