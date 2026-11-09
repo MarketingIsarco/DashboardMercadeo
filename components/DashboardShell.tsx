@@ -86,6 +86,12 @@ export function DashboardShell() {
     [data, filters],
   );
 
+  // Asesores dueños de al menos un trato, para el filtro de la barra.
+  const advisorOptions = useMemo(
+    () => (data ? [...new Set(data.leads.map((l) => l.advisor))] : []),
+    [data],
+  );
+
   const Active = TABS.find((t) => t.id === tab)!.Component;
 
   return (
@@ -185,6 +191,7 @@ export function DashboardShell() {
               years={years}
               shown={filtered.length}
               total={data.leads.length}
+              advisorOptions={advisorOptions}
             />
             {error ? (
               <p className="text-xs font-medium text-red">

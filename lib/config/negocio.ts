@@ -179,6 +179,31 @@ export const MEETING_TYPES = ['meeting'];
  */
 export const OUTBOUND_EXCLUDED_LABELS = ['Cotizó', 'warmlead'];
 
+/**
+ * Usuarios de Pipedrive que **no son personas**: lo que crean lo crea una
+ * automatización.
+ *
+ * · 25619101 — dueño del token de la API (Sebastián Gilede). Con su usuario
+ *   escriben ISA (agente de CIFRA) y el cron de reactivación: notas "Resumen
+ *   ISA", "Llamada de reactivación de ISA", "Reactivación V1/V2/V3 enviada".
+ *   También es el **propietario por defecto** de los leads que ISA todavía no
+ *   le pasó a un asesor.
+ * · 25982717 — Quiiven (Miguel Rojas): notas "Respuestas del formulario".
+ *
+ * El capítulo de prioridad de Comercial COIS los usa para dos cosas: no contar
+ * sus actividades como gestión del asesor, y marcar como "sin asesor" un trato
+ * que siga a su nombre. Se identifican por id, que no cambia aunque se edite el
+ * nombre del usuario.
+ */
+export const USUARIOS_AUTOMATIZACION = [25619101, 25982717];
+
+/**
+ * Cuántos días de notas se leen de Pipedrive para calificar los leads abiertos
+ * de la constructora (formulario de pauta y conversaciones de ISA). Más atrás
+ * casi no hay leads abiertos, y cada 500 notas es una request más por hora.
+ */
+export const PRIO_NOTAS_DIAS = 90;
+
 /** Etiqueta sintética que el dashboard le pone a los tratos sin etiquetar. */
 export const SIN_ETIQUETA = 'Sin etiqueta';
 

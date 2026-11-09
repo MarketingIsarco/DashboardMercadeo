@@ -8,6 +8,7 @@ import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
+import { PrioridadCois } from '@/components/tabs/PrioridadCois';
 import {
   ADVISOR_COLORS,
   LOSS_GROUPS,
@@ -93,9 +94,9 @@ interface PresentAdvisor {
 }
 
 /**
- * Capítulo 01 de las pestañas comerciales. Lo comparten **Comercial COIS** y
- * **Comercial INM** para que los indicadores se calculen igual en las dos: la
- * única diferencia es el universo de leads que recibe.
+ * Capítulo 01 de **Comercial INM**. Hasta nov 2026 también era el 01 de
+ * Comercial COIS; allá lo reemplazaron los indicadores de prioridad de leads
+ * (`PrioridadCois`). Se deja aquí para no mover lo que INM ya importa.
  */
 export function KpisGenerales({
   filtered,
@@ -144,7 +145,7 @@ export function KpisGenerales({
 
 // ── Componente principal ─────────────────────────────────────────────
 
-export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
+export function ComercialTab({ data, filtered, ganados, filters, meta }: TabProps) {
   // Los ganados vienen por fecha de ganado; el resto, por creación.
   const k = useMemo(() => computeKpis(filtered, ganados), [filtered, ganados]);
 
@@ -167,11 +168,13 @@ export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
 
   return (
     <>
-      {/* 01 · KPIs Generales */}
-      <KpisGenerales filtered={filtered} ganados={ganados} filters={filters} />
+      {/* 01–04 · Prioridad de leads de la constructora (indicadores, alarmas,
+          atiende primero, rendimiento por asesor). Reemplazó a los KPIs
+          generales en esta pestaña (nov 2026); Comercial INM los sigue usando. */}
+      <PrioridadCois data={data} filtered={filtered} ganados={ganados} filters={filters} meta={meta} />
 
-      {/* 02 · Gestión Comercial */}
-      <Section title="02 · Gestión Comercial" sub="Actividad y eficiencia del equipo comercial">
+      {/* 05 · Gestión Comercial */}
+      <Section title="05 · Gestión Comercial" sub="Actividad y eficiencia del equipo comercial">
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Leads por Asesor</h3>
@@ -201,8 +204,8 @@ export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
         </div>
       </Section>
 
-      {/* 03 · Antigüedad de Leads */}
-      <Section title="03 · Antigüedad de Leads" sub="Tiempo de los leads abiertos dentro del pipeline">
+      {/* 06 · Antigüedad de Leads */}
+      <Section title="06 · Antigüedad de Leads" sub="Tiempo de los leads abiertos dentro del pipeline">
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Distribución por Antigüedad</h3>
@@ -222,8 +225,8 @@ export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
         </div>
       </Section>
 
-      {/* 04 · Negocios Perdidos */}
-      <Section title="04 · Negocios Perdidos" sub="Dónde y por qué se pierden los leads">
+      {/* 07 · Negocios Perdidos */}
+      <Section title="07 · Negocios Perdidos" sub="Dónde y por qué se pierden los leads">
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold text-dim">Pérdida vs Ganados por Asesor</h3>
@@ -256,7 +259,7 @@ export function ComercialTab({ filtered, ganados, filters, meta }: TabProps) {
   );
 }
 
-// ── 02 · Gestión ─────────────────────────────────────────────────────
+// ── 05 · Gestión ─────────────────────────────────────────────────────
 
 interface AsesoresProps {
   leads: Lead[];
@@ -483,7 +486,7 @@ function TablaAsesor({ leads, ganados, advisors }: AsesoresProps) {
   );
 }
 
-// ── 03 · Antigüedad ──────────────────────────────────────────────────
+// ── 06 · Antigüedad ──────────────────────────────────────────────────
 
 function AgeDistribution({ leads }: { leads: Lead[] }) {
   // La distribución sólo tiene sentido sobre leads abiertos, como el original.
@@ -607,7 +610,7 @@ function AgingTable({ leads, advisors }: { leads: Lead[]; advisors: PresentAdvis
   );
 }
 
-// ── 04 · Perdidos ────────────────────────────────────────────────────
+// ── 07 · Perdidos ────────────────────────────────────────────────────
 
 function PerdidaVsGanados({ leads, ganados, advisors }: AsesoresProps) {
   const rows = advisors

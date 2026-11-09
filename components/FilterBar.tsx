@@ -50,6 +50,7 @@ export function FilterBar({
   years,
   shown,
   total,
+  advisorOptions,
 }: {
   filters: FilterState;
   onChange: (next: FilterState) => void;
@@ -59,6 +60,12 @@ export function FilterBar({
   /** Leads que sobreviven al filtro, para dar retroalimentación inmediata. */
   shown: number;
   total: number;
+  /**
+   * Índices de `meta.advisors` que son **dueños** de al menos un trato. La lista
+   * de `meta` también trae a quien sólo creó actividades (automatizaciones,
+   * apoyo), y ofrecerlos aquí devolvería cero leads.
+   */
+  advisorOptions: number[];
 }) {
   const set = (patch: Partial<FilterState>) => onChange({ ...filters, ...patch });
 
@@ -66,7 +73,10 @@ export function FilterBar({
 
   return (
     <div className="rounded-[18px] border border-border bg-card shadow-panel">
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-3 px-5 py-4">
+      {/* Una sola fila, siempre (pedido de Mercadeo, nov 2026). Sin
+          `overflow` a propósito: los desplegables son `absolute` y un
+          contenedor con scroll los recortaría. */}
+      <div className="flex flex-nowrap items-end gap-x-3 px-4 py-4">
         <Field label="Periodo">
           <PeriodFilter filters={filters} onChange={set} months={months} years={years} />
         </Field>
@@ -77,6 +87,18 @@ export function FilterBar({
             options={meta.projects.map((label, value) => ({ value, label }))}
             include={filters.projects}
             onChange={({ include }) => set({ projects: include })}
+          />
+        </Field>
+
+        <Field label="Asesor">
+          <OptionFilter
+            label="Asesor"
+            options={advisorOptions
+              .map((value) => ({ value, label: meta.advisors[value] ?? `#${value}` }))
+              .sort((a, b) => a.label.localeCompare(b.label, 'es'))}
+            include={filters.advisors}
+            onChange={({ include }) => set({ advisors: include })}
+            width={280}
           />
         </Field>
 

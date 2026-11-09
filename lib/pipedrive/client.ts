@@ -14,6 +14,11 @@ export const FIELD = {
    * propio.
    */
   ETIQUETA: process.env.PD_FIELD_ETIQUETA || 'label',
+  /**
+   * "Respuesta": texto donde la integración de pauta de Tinguazul deja las
+   * respuestas del formulario cuando no hay nota. Lo lee la prioridad de leads.
+   */
+  RESPUESTA: process.env.PD_FIELD_RESPUESTA || '8ac6cf6600573e9d13835e1a3f98defb9daa0b6b',
 } as const;
 
 export interface PipedriveDeal {
@@ -29,6 +34,13 @@ export interface PipedriveDeal {
   next_activity_date: string | null;
   /** `YYYY-MM-DD` de la última actividad registrada, o `null`. */
   last_activity_date: string | null;
+  /** `HH:MM:SS` **en UTC** de la próxima actividad; `null` si quedó sin hora. */
+  next_activity_time?: string | null;
+  next_activity_subject?: string | null;
+  /** `YYYY-MM-DD HH:MM:SS` (UTC) en que el trato entró a su etapa actual. */
+  stage_change_time?: string | null;
+  /** Propietario del trato. En v1 llega como objeto; en algunas cuentas, como id. */
+  user_id?: { id: number } | number | null;
   status: 'open' | 'won' | 'lost' | 'deleted';
   stage_id: number;
   pipeline_id: number;
@@ -222,6 +234,44 @@ export interface PipedriveUser {
 export async function fetchUsers(base: string): Promise<PipedriveUser[]> {
   const json = await request<PipedriveUser[]>(base, '/users');
   return json.data ?? [];
+}
+
+export interface PipedriveNote {
+  id: number;
+  deal_id: number | null;
+  user_id: number | null;
+  /** HTML. */
+  content: string | null;
+  /** `YYYY-MM-DD HH:MM:SS` (UTC). */
+  add_time: string | null;
+}
+
+/**
+ * Notas creadas desde `desde` (`YYYY-MM-DD`), paginando de a 500.
+ *
+ * Sólo las lee la prioridad de leads de Comercial COIS: el formulario de pauta
+ * y lo que ISA escribe de cada conversación. Se acota por fecha porque el CRM
+ * acumula cientos de notas por día (cada llamada de ISA deja una).
+ */
+export async function fetchNotesSince(base: string, desde: string): Promise<PipedriveNote[]> {
+  const porId = new Map<number, PipedriveNote>();
+  let start = 0;
+  const limit = 500;
+  const MAX_PAGES = 80;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const json = await request<PipedriveNote[]>(base, '/notes', {
+      start_date: desde,
+      sort: 'add_time ASC',
+      limit,
+      start,
+    });
+    if (!Array.isArray(json.data)) break;
+    for (const n of json.data) porId.set(n.id, n);
+    if (!json.additional_data?.pagination?.more_items_in_collection) break;
+    start += limit;
+  }
+  return [...porId.values()];
 }
 
 export async function fetchStages(base: string): Promise<PipedriveStage[]> {

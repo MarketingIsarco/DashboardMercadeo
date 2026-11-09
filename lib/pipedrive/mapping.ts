@@ -9,6 +9,7 @@ import {
   LOSS_GROUP_RULES,
   MEETING_TYPES,
   PIPELINE_TO_PROJECT,
+  PRIO_NOTAS_DIAS,
   PROJECTS,
   RECOVERABLE_RULES,
   SIN_ETIQUETA,
@@ -41,13 +42,15 @@ import {
   fetchAllActivities,
   fetchAllDeals,
   fetchDealFields,
+  fetchNotesSince,
   fetchPipelines,
   fetchStages,
   fetchUsers,
   resolveBase,
 } from './client';
-import type { PipedriveActivity, PipedriveDeal } from './client';
+import type { PipedriveActivity, PipedriveDeal, PipedriveNote } from './client';
 import { buildPerfilExtractor } from './perfil';
+import { buildPrioSenales } from './prio';
 
 function classifyLossGroup(reason: string): LossGroup | '' {
   if (!reason) return '';
@@ -313,13 +316,20 @@ function phoneOf(deal: PipedriveDeal): string {
 export async function loadDashboardData(): Promise<DashboardData> {
   const base = await resolveBase();
 
-  const [deals, activities, stages, pipelines, dealFields, users] = await Promise.all([
+  // Las notas sólo alimentan la prioridad de Comercial COIS: si fallan, el
+  // dashboard carga igual y los leads se califican sin formulario ni ISA.
+  const desdeNotas = new Date(Date.now() - PRIO_NOTAS_DIAS * 86_400_000).toISOString().slice(0, 10);
+  const [deals, activities, stages, pipelines, dealFields, users, notes] = await Promise.all([
     fetchAllDeals(base),
     fetchAllActivities(base),
     fetchStages(base),
     fetchPipelines(base),
     fetchDealFields(base),
     fetchUsers(base),
+    fetchNotesSince(base, desdeNotas).catch((err): PipedriveNote[] => {
+      console.error('[prio] no se pudieron leer las notas:', err instanceof Error ? err.message : err);
+      return [];
+    }),
   ]);
 
   const firstActivity = firstActivityByDeal(activities);
@@ -400,6 +410,17 @@ export async function loadDashboardData(): Promise<DashboardData> {
   );
   const advisorDeUsuario = (userId: number | null | undefined) =>
     intern(advisors, advisorIdx, (userId != null && userName.get(userId)) || 'Sin asignar');
+
+  // Señales de prioridad: sólo tratos abiertos de la constructora.
+  const prio = buildPrioSenales(
+    deals.filter((d) => {
+      if (d.status !== 'open') return false;
+      const pr = PIPELINE_TO_PROJECT[pipelineName.get(d.pipeline_id) ?? ''];
+      return pr !== undefined && CONSTRUCTORA_IDX.includes(pr);
+    }),
+    activities,
+    notes,
+  );
 
   const now = Date.now();
   const leads: Lead[] = [];
@@ -491,6 +512,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       // Sólo la inmobiliaria: en la constructora estos campos no aplican y
       // mandarlos inflaría el JSON.
       ficha: INMOBILIARIA_IDX.includes(project) ? ficha.extract(deal) : [],
+      prio: prio.get(deal.id),
     });
 
     // Una separación abierta ya es una venta comprometida, aunque el CRM

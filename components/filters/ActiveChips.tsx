@@ -48,6 +48,15 @@ function buildChips(f: FilterState, meta: Meta): Chip[] {
     }),
   );
 
+  f.advisors.forEach((i) =>
+    chips.push({
+      key: `adv-${i}`,
+      group: 'Asesor',
+      label: meta.advisors[i] ?? `#${i}`,
+      clear: { advisors: f.advisors.filter((x) => x !== i) },
+    }),
+  );
+
   f.stages.forEach((i) =>
     chips.push({
       key: `stg-${i}`,

@@ -15,7 +15,9 @@ const MIN_FORCE_MS = Number(process.env.DASHBOARD_MIN_REFRESH_MS ?? 5 * 60 * 100
 /** Cota de Upstash por request (10 MB en el plan gratis), con margen. */
 const MAX_SNAPSHOT_BYTES = 9 * 1024 * 1024;
 
-const SNAPSHOT_KEY = 'isarco:dashboard:snapshot:v1';
+// v2: los leads abiertos de la constructora traen `prio` (prioridad de COIS).
+// Cambiar la llave obliga a un barrido nuevo en vez de servir el formato viejo.
+const SNAPSHOT_KEY = 'isarco:dashboard:snapshot:v2';
 const LOCK_KEY = 'isarco:dashboard:refresh-lock';
 /** Un barrido completo tarda segundos; si el lock dura más, el dueño murió. */
 const LOCK_MS = 2 * 60 * 1000;

@@ -139,6 +139,67 @@ export interface Lead {
    * (`[]`) cuando no tiene ningún campo: leer siempre con `fichaVal`.
    */
   ficha: number[];
+
+  /**
+   * Señales para calificar el lead en Comercial COIS (capítulos 01–04).
+   *
+   * Sólo viaja en tratos **abiertos de la constructora**; en el resto llega
+   * `undefined`. También puede faltar en un payload viejo de la caché: quien lo
+   * lea tiene que tolerarlo. El puntaje y las alarmas se calculan en el
+   * navegador (`lib/prioridad.ts`) porque dependen de la hora actual y la caché
+   * dura una hora.
+   */
+  prio?: PrioSenales;
+}
+
+/** Cómo respondió el lead la pregunta de zona del formulario de pauta. */
+export type PrioZona = 'principal' | 'conoce' | 'conocer' | 'inversion' | 'varias' | 'otra' | '';
+/** Tipología del formulario, ordenada por ticket. */
+export type PrioTicket = 'ph' | 'alto' | 'medio' | 'bajo' | '';
+
+/**
+ * Lo que el CRM registra **solo** sobre un lead abierto: etapa, actividades y
+ * las notas que escriben las automatizaciones (ISA, formulario de pauta).
+ * Nada depende de que el asesor llene un campo o escriba una nota.
+ *
+ * Los instantes van en ISO UTC (`…Z`) para que el navegador los compare contra
+ * su propio reloj.
+ */
+export interface PrioSenales {
+  /** Instante de creación del trato (`add_time`). */
+  creado: string;
+  /** Cuándo entró a la etapa actual (`stage_change_time`, o la creación). */
+  etapaDesde: string;
+  /** Instante de la próxima actividad agendada; `''` si no hay ninguna. */
+  proxima: string;
+  proximaAsunto: string;
+  /** Última actividad hecha por una persona (no por ISA ni Quiiven); `''` si nunca. */
+  ultimaGestion: string;
+  /** Actividades creadas por personas sobre el trato. */
+  gestiones: number;
+  /** Instantes de citas o visitas agendadas que no están marcadas como hechas. */
+  citas: string[];
+  /** Instante de la cita o visita más reciente, hecha o no; `''` si nunca. */
+  ultimaCita: string;
+  /** Mayor mensaje de reactivación de ISA enviado (0 = ninguno, 1–3 = V1–V3). */
+  reactivacion: number;
+  zona: PrioZona;
+  ticket: PrioTicket;
+  /** Hay un "Resumen ISA": el lead conversó con el agente. */
+  isa: boolean;
+  /** Texto del último resumen de ISA, recortado y sin teléfonos ni correos. */
+  resumen: string;
+  vivir: boolean;
+  /** El resumen menciona ahorros, cesantías o crédito. */
+  pago: boolean;
+  /** Ánimo del lead en la última llamada de ISA. */
+  animo: '' | 'positivo' | 'neutral' | 'negativo';
+  /** Contestó una llamada de ISA y habló al menos 30 s. */
+  atendio: boolean;
+  noInteresado: boolean;
+  numeroErrado: boolean;
+  /** El trato sigue a nombre de un usuario de automatización (ISA). */
+  sinAsesor: boolean;
 }
 
 /**

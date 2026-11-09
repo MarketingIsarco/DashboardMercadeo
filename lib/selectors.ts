@@ -42,6 +42,11 @@ export interface FilterState {
   labels: number[];
   /** Índices en `meta.projects`. */
   projects: number[];
+  /**
+   * Índices en `meta.advisors`: el **propietario** del trato en Pipedrive.
+   * Vacío = todos. Filtra por dueño, no por quien registró la actividad.
+   */
+  advisors: number[];
   /** `true` = sólo digital, `false` = sólo no-digital, `null` = ambos. */
   digital: boolean | null;
   year: string | null;
@@ -61,6 +66,7 @@ export const defaultFilters: FilterState = {
   campaigns: [],
   labels: [],
   projects: [],
+  advisors: [],
   digital: null,
   year: null,
   dateFrom: null,
@@ -128,6 +134,7 @@ export function applyFilters(
   const porGanado = eje === 'ganado';
   const digitalSet = new Set(digitalSources);
   const projectSet = st.projects.length ? new Set(st.projects) : null;
+  const advisorSet = st.advisors.length ? new Set(st.advisors) : null;
   const sourceSet = st.sources.length ? new Set(st.sources) : null;
   const campaignSet = st.campaigns.length ? new Set(st.campaigns) : null;
   const labelSet = st.labels.length ? new Set(st.labels) : null;
@@ -141,6 +148,7 @@ export function applyFilters(
   return leads.filter((l) => {
     if (porGanado && l.status !== STATUS_WON) return false;
     if (projectSet && !projectSet.has(l.project)) return false;
+    if (advisorSet && !advisorSet.has(l.advisor)) return false;
 
     const date = porGanado ? l.wonDate : l.date;
     const month = porGanado ? l.wonMonth : l.month;
