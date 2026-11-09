@@ -319,18 +319,21 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // Las notas sólo alimentan la prioridad de Comercial COIS: si fallan, el
   // dashboard carga igual y los leads se califican sin formulario ni ISA.
   const desdeNotas = new Date(Date.now() - PRIO_NOTAS_DIAS * 86_400_000).toISOString().slice(0, 10);
-  const [deals, activities, stages, pipelines, dealFields, users, notes] = await Promise.all([
+  const [deals, activities, stages, pipelines, dealFields, users] = await Promise.all([
     fetchAllDeals(base),
     fetchAllActivities(base),
     fetchStages(base),
     fetchPipelines(base),
     fetchDealFields(base),
     fetchUsers(base),
-    fetchNotesSince(base, desdeNotas).catch((err): PipedriveNote[] => {
-      console.error('[prio] no se pudieron leer las notas:', err instanceof Error ? err.message : err);
-      return [];
-    }),
   ]);
+  // Las notas van **después** del barrido principal y no en paralelo: corrían
+  // como un tercer chorro de requests simultáneo y el pico disparaba el 429 de
+  // Pipedrive (nov 2026).
+  const notes = await fetchNotesSince(base, desdeNotas).catch((err): PipedriveNote[] => {
+    console.error('[prio] no se pudieron leer las notas:', err instanceof Error ? err.message : err);
+    return [];
+  });
 
   const firstActivity = firstActivityByDeal(activities);
 

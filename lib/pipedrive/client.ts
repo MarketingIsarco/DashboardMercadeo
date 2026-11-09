@@ -128,6 +128,33 @@ interface PipedriveEnvelope<T> {
   additional_data?: { pagination?: { more_items_in_collection?: boolean } };
 }
 
+const MAX_REINTENTOS_429 = 5;
+
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Cuánto esperar antes de reintentar un 429: lo que diga Pipedrive
+ * (`Retry-After` en segundos, o `x-ratelimit-reset`), y si no dice nada,
+ * 2 s, 4 s, 8 s… Nunca más de 15 s por intento.
+ */
+function esperaTras429(res: Response, intento: number): number {
+  const s = Number(res.headers.get('retry-after') ?? res.headers.get('x-ratelimit-reset'));
+  const ms = Number.isFinite(s) && s > 0 ? s * 1000 : 2000 * 2 ** intento;
+  return Math.min(ms, 15_000) + Math.floor(Math.random() * 300);
+}
+
+/** Lo que Pipedrive cuenta de su límite, para que el error diga cuál se agotó. */
+function detalleLimite(res: Response): string {
+  if (res.status !== 429) return '';
+  const diario = res.headers.get('x-daily-requests-left');
+  const ventana = res.headers.get('x-ratelimit-remaining');
+  const partes = [
+    diario !== null ? `cupo diario restante ${diario}` : '',
+    ventana !== null ? `restantes en la ventana ${ventana}` : '',
+  ].filter(Boolean);
+  return partes.length ? ` (${partes.join(' · ')})` : '';
+}
+
 async function request<T>(
   base: string,
   path: string,
@@ -137,9 +164,16 @@ async function request<T>(
   url.searchParams.set('api_token', token());
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
-  const res = await fetch(url, { cache: 'no-store' });
+  // 429 = Pipedrive pide bajar el ritmo. Antes se abortaba todo el barrido al
+  // primer 429; ahora se espera lo que indique (`Retry-After` o el reinicio de
+  // la ventana) y se reintenta, con un tope para no colgar la función.
+  let res = await fetch(url, { cache: 'no-store' });
+  for (let intento = 0; res.status === 429 && intento < MAX_REINTENTOS_429; intento++) {
+    await esperar(esperaTras429(res, intento));
+    res = await fetch(url, { cache: 'no-store' });
+  }
   if (!res.ok) {
-    throw new Error(`Pipedrive ${path} respondió ${res.status} ${res.statusText}`);
+    throw new Error(`Pipedrive ${path} respondió ${res.status} ${res.statusText}${detalleLimite(res)}`);
   }
   const json = (await res.json()) as PipedriveEnvelope<T>;
   if (!json.success) {

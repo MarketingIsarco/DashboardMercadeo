@@ -18,6 +18,12 @@ const MAX_SNAPSHOT_BYTES = 9 * 1024 * 1024;
 // v2: los leads abiertos de la constructora traen `prio` (prioridad de COIS).
 // Cambiar la llave obliga a un barrido nuevo en vez de servir el formato viejo.
 const SNAPSHOT_KEY = 'isarco:dashboard:snapshot:v2';
+/**
+ * La copia del formato anterior. Si todavía no existe una v2 y Pipedrive falla
+ * (p. ej. un 429 en el primer barrido después de publicar), se sirve esta en
+ * vez de un error: sólo le falta la prioridad de COIS, que la pestaña tolera.
+ */
+const SNAPSHOT_KEY_ANTERIOR = 'isarco:dashboard:snapshot:v1';
 const LOCK_KEY = 'isarco:dashboard:refresh-lock';
 /** Un barrido completo tarda segundos; si el lock dura más, el dueño murió. */
 const LOCK_MS = 2 * 60 * 1000;
@@ -52,7 +58,8 @@ async function redis<T>(command: (string | number)[]): Promise<T | null> {
 /** La caché compartida es una optimización: si falla, se sigue sin ella. */
 async function readSnapshot(): Promise<DashboardData | null> {
   try {
-    const raw = await redis<string>(['GET', SNAPSHOT_KEY]);
+    const raw =
+      (await redis<string>(['GET', SNAPSHOT_KEY])) ?? (await redis<string>(['GET', SNAPSHOT_KEY_ANTERIOR]));
     return raw ? (JSON.parse(raw) as DashboardData) : null;
   } catch (err) {
     console.error('[cache] no se pudo leer Redis:', err instanceof Error ? err.message : err);
