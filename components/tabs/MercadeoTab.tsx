@@ -13,6 +13,7 @@ import { Kpi, KpiGrid } from '@/components/ui/Kpi';
 import { Section } from '@/components/ui/Section';
 import {
   BOLSA_LABEL,
+  NOTA_TIPOS,
   DIGITAL_COLOR,
   INVERSION_MESES,
   LOSS_GROUPS,
@@ -38,13 +39,15 @@ import {
   STAGES,
   STAGE_SEPARACION,
 } from '@/lib/config/negocio';
-import type { Bolsa } from '@/lib/config/negocio';
+import type { Bolsa, InversionNota } from '@/lib/config/negocio';
 import { fmtCOP, monthLabel, normalize, pct, pctNum, sourceIndices } from '@/lib/format';
 import { cobertura, coberturaMensual, combinaciones, distribucion, suficiencia } from '@/lib/buyer';
 import type { Distribucion } from '@/lib/buyer';
 import {
   bolsasActivas,
+  etiquetaBolsas,
   matrizRubros,
+  notasActivas,
   mesesActivos,
   proyectosDeBolsas,
   totales,
@@ -1510,7 +1513,7 @@ function Inversion({
           size="sm"
           label="Inversión Total"
           value={kv.total > 0 ? millions(kv.total) : '–'}
-          meta={`${kv.activeMonths} mes(es) · ${bolsas.map((b) => BOLSA_LABEL[b]).join(' + ')}`}
+          meta={`${kv.activeMonths} mes(es) · ${etiquetaBolsas(bolsas)}`}
         />
         <Kpi
           size="sm"
@@ -1589,6 +1592,7 @@ function RubrosTable({ bolsas, months }: { bolsas: Bolsa[]; months: string[] }) 
     v ? `$${Math.round(v / 1000).toLocaleString('es-CO')}k` : <span className="text-muted">–</span>;
 
   const visibles = RUBROS.map((r, ri) => ({ r, ri })).filter(({ ri }) => t.rowTot[ri] > 0);
+  const notas = useMemo(() => notasActivas(bolsas, months), [bolsas, months]);
 
   if (!visibles.length) {
     return <p className="text-xs text-muted">Sin gasto registrado en el periodo seleccionado.</p>;
@@ -1636,11 +1640,19 @@ function RubrosTable({ bolsas, months }: { bolsas: Bolsa[]; months: string[] }) 
                   <span style={{ color }}>●</span> {r.label}
                 </td>
                 <td className="text-2xs text-muted">{r.fuentes.join(', ')}</td>
-                {t.matrix[ri].map((v, ci) => (
-                  <td key={months[ci]} className="text-right">
-                    {k(v)}
-                  </td>
-                ))}
+                {t.matrix[ri].map((v, ci) => {
+                  const nota = notas.find((n) => n.rubro === ri && n.mes === months[ci]);
+                  return (
+                    <td key={months[ci]} className="text-right">
+                      {k(v)}
+                      {nota && (
+                        <sup className="ml-0.5 font-bold text-accent" title={`Ver nota ${notas.indexOf(nota) + 1}`}>
+                          ({notas.indexOf(nota) + 1})
+                        </sup>
+                      )}
+                    </td>
+                  );
+                })}
                 <td className="text-right font-semibold">{k(t.rowTot[ri])}</td>
               </tr>
             );
@@ -1673,6 +1685,75 @@ function RubrosTable({ bolsas, months }: { bolsas: Bolsa[]; months: string[] }) 
           </tr>
         </tfoot>
       </table>
+      {notas.map((n, i) => (
+        <NotaInversion key={`${n.bolsa}-${n.rubro}-${n.mes}`} nota={n} num={i + 1} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Nota al pie de un gasto atípico: el total de la celda, en qué se fue la
+ * plata agrupado por tipo, y el detalle contrato por contrato del P&G.
+ */
+function NotaInversion({ nota, num }: { nota: InversionNota; num: number }) {
+  const total = nota.items.reduce((a, it) => a + it.valor, 0);
+  const tipos = NOTA_TIPOS.map((tipo) => ({ tipo, valor: nota.items.filter((it) => it.tipo === tipo).reduce((a, it) => a + it.valor, 0) }))
+    .filter((x) => x.valor > 0);
+
+  return (
+    <div className="mt-4 rounded-md border border-accent-border bg-accent-tint p-3 text-2xs">
+      <p className="mb-1 text-xs font-semibold">
+        <span className="text-accent">({num})</span> {BOLSA_LABEL[nota.bolsa]} · {RUBROS[nota.rubro].label} ·{' '}
+        {monthLabel(nota.mes)}: <span className="font-bold">{fmtCOP(total)}</span>
+      </p>
+      <p className="mb-2 text-muted">{nota.resumen}</p>
+      <div className="mb-2 flex flex-wrap gap-x-5 gap-y-1">
+        {tipos.map((x) => (
+          <span key={x.tipo}>
+            <span className="text-muted">{x.tipo}:</span> <b>{fmtCOP(x.valor)}</b>{' '}
+            <span className="text-muted">({Math.round((x.valor / total) * 100)}%)</span>
+          </span>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="dt">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Proveedor</th>
+              <th>Concepto</th>
+              <th>Contrato</th>
+              <th>Tipo</th>
+              <th style={{ textAlign: 'right' }}>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {nota.items.map((it, i) => (
+              <tr key={i}>
+                <td style={{ whiteSpace: 'nowrap' }}>{it.fecha}</td>
+                <td>{it.proveedor}</td>
+                <td>{it.concepto}</td>
+                <td>{it.contrato}</td>
+                <td className={it.tipo.startsWith('Pauta Meta · sep') ? '' : 'font-semibold text-accent'} style={{ whiteSpace: 'nowrap' }}>
+                  {it.tipo}
+                </td>
+                <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
+                  {fmtCOP(it.valor)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-accent">
+              <td className="font-bold" colSpan={5}>
+                TOTAL
+              </td>
+              <td className="text-right font-bold">{fmtCOP(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

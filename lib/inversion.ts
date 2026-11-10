@@ -1,5 +1,5 @@
-import { BOLSA_PROJECTS, INVERSION_MESES, INVERSION_RUBROS, RUBROS } from '@/lib/config/negocio';
-import type { Bolsa } from '@/lib/config/negocio';
+import { BOLSA_LABEL, BOLSAS_INMOBILIARIA, BOLSA_PROJECTS, INVERSION_MESES, INVERSION_NOTAS, INVERSION_RUBROS, RUBROS } from '@/lib/config/negocio';
+import type { Bolsa, InversionNota } from '@/lib/config/negocio';
 import type { FilterState } from '@/lib/selectors';
 
 /**
@@ -16,7 +16,7 @@ import type { FilterState } from '@/lib/selectors';
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-export const BOLSAS: Bolsa[] = ['inari', 'tng', 'inm'];
+export const BOLSAS: Bolsa[] = ['inari', 'tng', ...BOLSAS_INMOBILIARIA];
 
 /** Índices de `RUBROS` marcados como digitales. */
 const DIGITAL_RUBROS = new Set(RUBROS.map((r, i) => (r.digital ? i : -1)).filter((i) => i >= 0));
@@ -110,4 +110,33 @@ export function bolsasDeProyecto(projIdx: number | null): Bolsa[] {
 /** Proyectos cubiertos por las bolsas activas — para filtrar los leads del CPL. */
 export function proyectosDeBolsas(bolsas: Bolsa[]): number[] {
   return [...new Set(bolsas.flatMap((b) => BOLSA_PROJECTS[b]))];
+}
+
+/**
+ * Notas de gasto atípico que aplican a las bolsas y meses visibles.
+ *
+ * Una nota sólo se muestra si su desglose cuadra peso a peso contra la celda
+ * de la matriz: si alguien recarga el P&G y la celda cambia, la nota vieja
+ * desaparece en vez de explicar una cifra que ya no es la que se ve.
+ */
+export function notasActivas(bolsas: Bolsa[], meses: string[]): InversionNota[] {
+  return INVERSION_NOTAS.filter((n) => {
+    if (!bolsas.includes(n.bolsa) || !meses.includes(n.mes)) return false;
+    const ci = INVERSION_MESES.indexOf(n.mes);
+    const celda = INVERSION_RUBROS[n.bolsa][n.rubro]?.[ci];
+    return celda != null && n.items.reduce((a, it) => a + it.valor, 0) === celda;
+  });
+}
+
+/**
+ * Rótulo de las bolsas activas. Con los cinco embudos inmobiliarios puestos se
+ * dice "Inmobiliaria" en vez de listar los cinco nombres.
+ */
+export function etiquetaBolsas(bolsas: Bolsa[]): string {
+  const todasInm = BOLSAS_INMOBILIARIA.every((b) => bolsas.includes(b));
+  const partes = bolsas
+    .filter((b) => !(todasInm && BOLSAS_INMOBILIARIA.includes(b)))
+    .map((b) => BOLSA_LABEL[b]);
+  if (todasInm) partes.push('Inmobiliaria');
+  return partes.join(' + ');
 }

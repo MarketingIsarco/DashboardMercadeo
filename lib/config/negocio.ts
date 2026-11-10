@@ -237,24 +237,35 @@ export const PROJECT_COLORS = [
  */
 
 /** Bolsa presupuestal. Cada una cubre uno o varios proyectos. */
-export type Bolsa = 'inari' | 'tng' | 'inm';
+export type Bolsa = 'inari' | 'tng' | 'dep' | 'ter' | 'loc' | 'cow' | 'ofi';
+
+/** Bolsas de la unidad inmobiliaria: una por embudo, como los cuadros del P&G. */
+export const BOLSAS_INMOBILIARIA: Bolsa[] = ['dep', 'ter', 'loc', 'cow', 'ofi'];
 
 /** Índices de `PROJECTS` que consume cada bolsa. */
 export const BOLSA_PROJECTS: Record<Bolsa, number[]> = {
   inari: [0],
   tng: [1, 2],
-  inm: INMOBILIARIA_IDX,
+  dep: [3],
+  ter: [4],
+  loc: [5],
+  cow: [6],
+  ofi: [7],
 };
 
 export const BOLSA_LABEL: Record<Bolsa, string> = {
   inari: 'Inari 101',
   tng: 'Tinguazul',
-  inm: 'Inmobiliaria',
+  dep: 'Bodegas / Depósitos',
+  ter: 'Otros Inmuebles (Op. terceros)',
+  loc: 'Locales',
+  cow: 'Coworking',
+  ofi: 'Oficinas',
 };
 
 /** Meses con presupuesto cargado, en orden cronológico. */
 export const INVERSION_MESES = [
-  '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09',
+  '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10',
 ];
 
 export interface Rubro {
@@ -299,67 +310,214 @@ export const RUBROS: Rubro[] = [
  */
 export const INVERSION_RUBROS: Record<Bolsa, number[][]> = {
   inari: [
-    /*  0 Publicidad Digital*/ [0, 5_800_000, 200_000, 5_600_000, 3_400_000, 5_500_000, 5_404_688, 5_100_000, 21_254_000],
-    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /*  2 CRM-WhatsApp       */ [56_478, 85_133, 84_306, 283_615, 0, 0, 111_580, 0, 0],
-    /*  3 Banderas           */ [0, 3_478_370, 606_900, 0, 0, 0, 606_900, 0, 0],
-    /*  4 Valla              */ [374_078, 0, 890_477, 0, 306_425, 0, 4_998_000, 0, 353_430],
-    /*  5 Volantes           */ [0, 1_391_110, 119_000, 142_800, 1_582_700, 0, 756_840, 0, 0],
-    /*  6 Brochures          */ [0, 0, 4_581_500, 0, 0, 0, 0, 0, 0],
-    /*  7 Eventos            */ [0, 0, 1_326_255, 0, 0, 0, 684_250, 0, 333_200],
-    /*  8 Chat IA            */ [1_900_947, 1_565_253, 1_530_537, 1_494_080, 6_411_909, 902_524, 2_000_000, 375_000, 7_659_800],
-    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 61_600, 0, 235_618],
-    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [314_262, 971_778, 993_849, 0, 2_204_910, 1_000_500, 0, 3_795_022, 10_000_000],
-    /* 14 PR                 */ [73_800, 0, 0, 0, 300_000, 1_785_000, 0, 0, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [0, 5_800_000, 200_000, 5_600_000, 3_400_000, 5_500_000, 5_404_688, 5_100_000, 21_254_000, 6_938_408],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [56_478, 85_133, 84_306, 283_615, 0, 0, 111_580, 0, 0, 2_370_712],
+    /*  3 Banderas           */ [0, 3_478_370, 606_900, 0, 0, 0, 606_900, 0, 0, 0],
+    /*  4 Valla              */ [374_078, 0, 890_477, 0, 306_425, 0, 4_998_000, 0, 353_430, 3_989_475],
+    /*  5 Volantes           */ [0, 1_391_110, 119_000, 142_800, 1_582_700, 0, 756_840, 0, 0, 309_400],
+    /*  6 Brochures          */ [0, 0, 4_581_500, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [0, 0, 1_326_255, 0, 0, 0, 684_250, 0, 333_200, 1_100_000],
+    /*  8 Chat IA            */ [1_900_947, 1_565_253, 1_530_537, 1_494_080, 6_411_909, 902_524, 2_000_000, 375_000, 7_659_800, 375_000],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 61_600, 0, 235_618, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [314_262, 971_778, 993_849, 0, 2_204_910, 1_000_500, 0, 3_795_022, 10_000_000, 3_933_029],
+    /* 14 PR                 */ [73_800, 0, 0, 0, 300_000, 1_785_000, 0, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
   tng: [
-    /*  0 Publicidad Digital*/ [4_760_000, 3_000_000, 3_000_000, 2_987_520, 2_512_480, 3_642_000, 5_041_027, 0, 2_000_000],
-    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /*  2 CRM-WhatsApp       */ [48_239, 67_948, 77_237, 236_054, 0, 0, 94_501, 0, 0],
-    /*  3 Banderas           */ [0, 0, 0, 1_213_800, 0, 0, 1_213_800, 0, 0],
-    /*  4 Valla              */ [60_000, 676_872, 0, 0, 0, 0, 0, 2_499_000, 2_526_370],
-    /*  5 Volantes           */ [0, 198_730, 404_600, 353_352, 2_084_788, 557_289, 351_050, 0, 0],
-    /*  6 Brochures          */ [0, 202_300, 0, 440_300, 0, 0, 0, 0, 0],
-    /*  7 Eventos            */ [272_462, 1_140_568, 1_198_092, 0, 2_311_700, 0, 684_250, 0, 349_990],
-    /*  8 Chat IA            */ [989_687, 937_981, 1_033_922, 890_121, 6_594_266, 813_284, 2_000_000, 375_000, 3_375_000],
-    /*  9 Página Web         */ [0, 0, 53_000, 3_374_388, 0, 0, 0, 0, 0],
-    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 14 PR                 */ [0, 0, 60_000, 0, 0, 0, 0, 0, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  0 Publicidad Digital*/ [4_760_000, 3_000_000, 3_000_000, 2_987_520, 2_512_480, 3_642_000, 5_041_027, 0, 2_000_000, 2_641_666],
+    /*  1 Portales           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  2 CRM-WhatsApp       */ [48_239, 67_948, 77_237, 236_054, 0, 0, 94_501, 0, 0, 2_204_882],
+    /*  3 Banderas           */ [0, 0, 0, 1_213_800, 0, 0, 1_213_800, 0, 0, 0],
+    /*  4 Valla              */ [60_000, 676_872, 0, 0, 0, 0, 0, 2_499_000, 2_526_370, 589_050],
+    /*  5 Volantes           */ [0, 198_730, 404_600, 353_352, 2_084_788, 557_289, 351_050, 0, 0, 0],
+    /*  6 Brochures          */ [0, 202_300, 0, 440_300, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [272_462, 1_140_568, 1_198_092, 0, 2_311_700, 0, 684_250, 0, 349_990, 0],
+    /*  8 Chat IA            */ [989_687, 937_981, 1_033_922, 890_121, 6_594_266, 813_284, 2_000_000, 375_000, 3_375_000, 375_000],
+    /*  9 Página Web         */ [0, 0, 53_000, 3_374_388, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [0, 0, 60_000, 0, 0, 0, 0, 0, 0, 0],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
-  // Agregado de Coworking + Depósitos + Op. Terceros + Locales + Oficinas.
+  // ── Inmobiliaria: un cuadro del P&G por embudo ───────────────────────────
   //
-  // Julio trae un valor **negativo** en Portales Inmobiliarios (−$792.362):
-  // es la reversión contable de cargos de portales que el P&G registra en el
-  // mes. Se carga tal cual viene del P&G — ajustarlo a cero haría que el
-  // dashboard dejara de cuadrar contra el estado de resultados, que es la
-  // única razón por la que esta matriz existe.
-  inm: [
-    /*  0 Publicidad Digital*/ [870_622, 892_360, 0, 1_015_977, 0, 293_757, 2_675_782, 473_603, 500_735],
-    /*  1 Portales           */ [110_000, 1_332_445, 1_010_469, 0, 1_345_940, 123_495, -792_362, 975_379, 1_870_000],
-    /*  2 CRM-WhatsApp       */ [7_588, 5_125, 5_071, 0, 0, 14_733, 24_357, 0, 0],
-    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /*  4 Valla              */ [0, 0, 250_000, 1_704_000, 651_750, 1_116_000, 86_000, 0, 0],
-    /*  5 Volantes           */ [0, 244_986, 870_000, 0, 0, 163_324, 0, 81_662, 0],
-    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /*  7 Eventos            */ [60_000, 0, 0, 0, 0, 0, 0, 0, 0],
-    /*  8 Chat IA            */ [0, 1_117_543, 295_468, 527_891, 281_689, 402_042, 0, 0, 0],
-    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 10 Tour Virtuales     */ [0, 1_200_000, 0, 0, 0, 0, 0, 0, 0],
-    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    /* 14 PR                 */ [754_624, 754_624, 377_312, 377_312, 0, 0, 0, 0, 0],
-    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0],
+  // La suma de las cinco bolsas da peso a peso el cuadro consolidado
+  // "Inmobiliaria" de Gasto INMO. Contabilidad prorratea en quintos los gastos
+  // compartidos (portales, Chat IA, CRM-WhatsApp, PR, eventos) y las cifras
+  // traen centavos: se redondearon de modo que el consolidado cuadre exacto.
+  // Lo que sí es propio de cada embudo es la pauta, la valla, los volantes y
+  // el tour virtual.
+  //
+  // Julio trae un valor **negativo** en Portales Inmobiliarios (−$792.362 en
+  // total): es la reversión contable de cargos de portales. Se carga tal cual
+  // viene del P&G — ajustarlo a cero haría que el dashboard dejara de cuadrar
+  // contra el estado de resultados, que es la única razón por la que esta
+  // matriz existe.
+  // Gasto INMO › Depósitos (fila 113)
+  dep: [
+    /*  0 Publicidad Digital*/ [870_622, 892_360, 0, 215_977, 0, 293_757, 2_675_782, 473_603, 500_735, 583_930],
+    /*  1 Portales           */ [22_000, 266_489, 202_094, 0, 244_489, 0, -158_472, 195_076, 374_000, 244_489],
+    /*  2 CRM-WhatsApp       */ [1_518, 1_025, 1_014, 0, 0, 2_947, 4_871, 0, 0, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  5 Volantes           */ [0, 0, 380_000, 0, 0, 163_324, 0, 81_662, 0, 0],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [12_000, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 223_509, 59_094, 105_578, 56_338, 80_408, 0, 0, 0, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [150_925, 150_925, 75_462, 75_462, 0, 0, 0, 0, 0, 75_462],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+  // Gasto INMO › Operación de terceros (fila 25)
+  ter: [
+    /*  0 Publicidad Digital*/ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  1 Portales           */ [22_000, 266_489, 202_093, 0, 244_489, 0, -158_473, 195_075, 374_000, 244_489],
+    /*  2 CRM-WhatsApp       */ [1_517, 1_025, 1_015, 0, 0, 2_946, 4_872, 0, 0, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 250_000, 0, 651_750, 0, 0, 0, 0, 0],
+    /*  5 Volantes           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [12_000, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 223_508, 59_093, 105_579, 56_337, 80_409, 0, 0, 0, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [150_924, 150_924, 75_463, 75_463, 0, 0, 0, 0, 0, 75_463],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+  // Gasto INMO › Locales propios (fila 47)
+  loc: [
+    /*  0 Publicidad Digital*/ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  1 Portales           */ [22_000, 266_489, 202_094, 0, 244_489, 0, -158_473, 195_076, 374_000, 244_489],
+    /*  2 CRM-WhatsApp       */ [1_517, 1_025, 1_014, 0, 0, 2_946, 4_872, 0, 0, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  5 Volantes           */ [0, 244_986, 230_000, 0, 0, 0, 0, 0, 0, 0],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [12_000, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 223_508, 59_093, 105_578, 56_338, 80_409, 0, 0, 0, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [150_925, 150_925, 75_463, 75_463, 0, 0, 0, 0, 0, 75_463],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+  // Gasto INMO › Coworking (fila 91)
+  cow: [
+    /*  0 Publicidad Digital*/ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  1 Portales           */ [22_000, 266_489, 202_094, 0, 244_489, 0, -158_472, 195_076, 374_000, 244_489],
+    /*  2 CRM-WhatsApp       */ [1_518, 1_025, 1_014, 0, 0, 2_947, 4_871, 0, 0, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 0, 0, 0, 0, 86_000, 0, 0, 0],
+    /*  5 Volantes           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [12_000, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 223_509, 59_094, 105_578, 56_338, 80_408, 0, 0, 0, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [150_925, 150_925, 75_462, 75_462, 0, 0, 0, 0, 0, 75_462],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+  // Gasto INMO › Oficinas propias (fila 69)
+  ofi: [
+    /*  0 Publicidad Digital*/ [0, 0, 0, 800_000, 0, 0, 0, 0, 0, 0],
+    /*  1 Portales           */ [22_000, 266_489, 202_094, 0, 367_984, 123_495, -158_472, 195_076, 374_000, 244_489],
+    /*  2 CRM-WhatsApp       */ [1_518, 1_025, 1_014, 0, 0, 2_947, 4_871, 0, 0, 0],
+    /*  3 Banderas           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  4 Valla              */ [0, 0, 0, 1_704_000, 0, 1_116_000, 0, 0, 0, 0],
+    /*  5 Volantes           */ [0, 0, 260_000, 0, 0, 0, 0, 0, 0, 0],
+    /*  6 Brochures          */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  7 Eventos            */ [12_000, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /*  8 Chat IA            */ [0, 223_509, 59_094, 105_578, 56_338, 80_408, 0, 0, 0, 0],
+    /*  9 Página Web         */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 10 Tour Virtuales     */ [0, 1_200_000, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 11 1 Módulo           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 12 Obsequio           */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 13 Activaciones       */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /* 14 PR                 */ [150_925, 150_925, 75_462, 75_462, 0, 0, 0, 0, 0, 75_462],
+    /* 15 Merchandising      */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   ],
 };
+
+/**
+ * Notas de gasto atípico: el desglose que Contabilidad deja como comentario en
+ * una celda del P&G. El valor de la matriz NO se toca —sigue cuadrando contra
+ * el estado de resultados—; la nota sólo explica de qué está hecho.
+ *
+ * La suma de `items` tiene que dar exactamente la celda
+ * `INVERSION_RUBROS[bolsa][rubro][mes]`. Si no cuadra, la tabla no pinta la nota.
+ */
+/** Tipos en el orden en que la nota los agrupa. */
+export const NOTA_TIPOS = [
+  'Pauta Meta · agosto',
+  'Pauta Meta · septiembre',
+  'Influenciador',
+  'Producción',
+  'Data de mercado',
+] as const;
+export type InversionNotaTipo = (typeof NOTA_TIPOS)[number];
+
+export interface InversionNotaItem {
+  fecha: string;
+  proveedor: string;
+  concepto: string;
+  contrato: string;
+  valor: number;
+  /** Qué compró realmente la plata, aunque el P&G lo cargue a pauta. */
+  tipo: InversionNotaTipo;
+}
+
+export interface InversionNota {
+  bolsa: Bolsa;
+  /** Índice de `RUBROS`. */
+  rubro: number;
+  /** Mes de `INVERSION_MESES`. */
+  mes: string;
+  resumen: string;
+  items: InversionNotaItem[];
+}
+
+export const INVERSION_NOTAS: InversionNota[] = [
+  {
+    // P&G 50-Mercadeo, Gasto COIS!AB28 (ejecutado, corte octubre).
+    bolsa: 'inari',
+    rubro: 0,
+    mes: '2026-09',
+    resumen:
+      'Gasto atípico. Del total, sólo $8,26M es pauta Meta de septiembre: $4,74M es pauta Meta de agosto causada en ' +
+      'septiembre, $0,4M es influenciador, y $7,85M no es compra de medios (producción de video y data de mercado). ' +
+      'El CPL de septiembre de Inari queda inflado y el de agosto subestimado.',
+    items: [
+      { fecha: '01-sep', proveedor: 'Meta', concepto: 'Pauta Facebook agosto 2026 (pago 18-ago)', contrato: '1730451', valor: 2_500_000, tipo: 'Pauta Meta · agosto' },
+      { fecha: '01-sep', proveedor: 'GoBig Agency', concepto: 'Video pauta con modelo (producción, no pauta)', contrato: '1730436', valor: 3_094_000, tipo: 'Producción' },
+      { fecha: '01-sep', proveedor: 'Meta', concepto: 'Pauta Facebook agosto 2026 (pago 31-ago)', contrato: '1730458', valor: 500_000, tipo: 'Pauta Meta · agosto' },
+      { fecha: '01-sep', proveedor: 'Meta', concepto: 'Pauta Facebook agosto 2026 (pago 31-ago)', contrato: '1730458', valor: 1_735_019, tipo: 'Pauta Meta · agosto' },
+      { fecha: '04-sep', proveedor: 'Meta', concepto: 'Pauta Facebook septiembre 2026 (pago 1-sep)', contrato: '1730460', valor: 2_264_981, tipo: 'Pauta Meta · septiembre' },
+      { fecha: '15-sep', proveedor: 'Faber Yamit Corredor Alvarado', concepto: 'Pauta influenciador Faber', contrato: '1730465', valor: 400_000, tipo: 'Influenciador' },
+      { fecha: '16-sep', proveedor: 'Meta', concepto: 'Pauta Facebook septiembre 2026 (pago 9-sep)', contrato: '1730463', valor: 3_000_000, tipo: 'Pauta Meta · septiembre' },
+      { fecha: '22-sep', proveedor: 'La Galería Inmobiliaria', concepto: 'Koggi & LGI (data de mercado, no pauta)', contrato: '1730452', valor: 4_760_000, tipo: 'Data de mercado' },
+      { fecha: '24-sep', proveedor: 'Meta', concepto: 'Pauta Facebook septiembre 2026 (pago 21-sep)', contrato: '1730467', valor: 2_000_000, tipo: 'Pauta Meta · septiembre' },
+      { fecha: '29-sep', proveedor: 'Meta', concepto: 'Pauta Facebook septiembre 2026 (pago 25-sep), contrato abierto', contrato: '1730474', valor: 1_000_000, tipo: 'Pauta Meta · septiembre' },
+    ],
+  },
+];
 
 /** Colores de la partición digital / no-digital. Se usan en chart y tabla. */
 export const DIGITAL_COLOR = '#60a5fa';
