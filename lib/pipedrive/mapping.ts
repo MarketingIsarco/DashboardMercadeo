@@ -16,6 +16,7 @@ import {
   STAGES,
   STAGE_SEPARACION,
   STAGE_TO_IDX,
+  STAGE_VISITA,
 } from '@/lib/config/negocio';
 import {
   CONTENT_NONE,
@@ -224,6 +225,59 @@ function buildMeetings(activities: PipedriveActivity[], dealIds: Set<number>): M
   return out;
 }
 
+/** Una reunión de un trato, ya en fecha local. */
+interface ReunionTrato {
+  date: string;
+  done: boolean;
+}
+
+/** `deal_id` → sus reuniones, en fecha local de Bogotá. */
+function reunionesPorTrato(activities: PipedriveActivity[]): Map<number, ReunionTrato[]> {
+  const out = new Map<number, ReunionTrato[]>();
+  for (const a of activities) {
+    if (!a.deal_id || !a.due_date) continue;
+    if (!MEETING_TYPE_SET.has(a.type ?? '')) continue;
+    const { date } = toLocal(a.due_date, a.due_time);
+    const l = out.get(a.deal_id) ?? [];
+    l.push({ date, done: Boolean(a.done) });
+    out.set(a.deal_id, l);
+  }
+  return out;
+}
+
+/**
+ * Fecha en que el lead visitó, o `''`. El porqué del orden está en
+ * `Lead.visitDate` (`lib/types.ts`).
+ *
+ * Toda fecha anterior a la creación del trato se descarta: pasa en cargas
+ * masivas, donde la reunión conserva su fecha original y el trato la de
+ * importación, y produciría un "desfase" negativo.
+ */
+function fechaDeVisita(
+  deal: PipedriveDeal,
+  date: string,
+  stage: number,
+  reuniones: ReunionTrato[] | undefined,
+  hoy: string,
+): string {
+  if (stage < STAGE_VISITA) return '';
+
+  const validas = (reuniones ?? []).filter((r) => r.date >= date && r.date <= hoy);
+
+  const hechas = validas.filter((r) => r.done).map((r) => r.date).sort();
+  if (hechas.length) return hechas[0];
+
+  if (stage === STAGE_VISITA) {
+    if (!deal.stage_change_time) return date;
+    const [d, t] = deal.stage_change_time.replace('T', ' ').split(' ');
+    const local = toLocal(d, t?.slice(0, 5)).date;
+    return local >= date ? local : date;
+  }
+
+  const pasadas = validas.map((r) => r.date).sort();
+  return pasadas.length ? pasadas[pasadas.length - 1] : '';
+}
+
 /**
  * Ids de etiqueta de un trato, unificando las dos formas en que Pipedrive los
  * manda (`label_ids` y `label`).
@@ -336,6 +390,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
   });
 
   const firstActivity = firstActivityByDeal(activities);
+  const reuniones = reunionesPorTrato(activities);
+  // "Hoy" en Bogotá, para no tomar como visita una reunión que aún no ocurre.
+  const hoy = new Date(Date.now() + CRM_UTC_OFFSET_HOURS * 3_600_000).toISOString().slice(0, 10);
 
   const stageName = new Map(stages.map((s) => [s.id, s.name]));
   const pipelineName = new Map(pipelines.map((p) => [p.id, p.name]));
@@ -511,6 +568,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       perfil: perfil.extract(deal),
       firstContactHours: firstContactHours(deal, primera?.ts),
       firstContactBy: primera ? advisorDeUsuario(primera.creador) : -1,
+      visitDate: fechaDeVisita(deal, date, stage, reuniones.get(deal.id), hoy),
       etapaCrm: etapaCrmIdx.get(stageName.get(deal.stage_id) ?? '') ?? -1,
       // Sólo la inmobiliaria: en la constructora estos campos no aplican y
       // mandarlos inflaría el JSON.

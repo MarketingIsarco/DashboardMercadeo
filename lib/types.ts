@@ -92,6 +92,27 @@ export interface Lead {
   firstContactHours: number | null;
 
   /**
+   * `YYYY-MM-DD` (hora de Bogotá) en que el lead **visitó**; `''` cuando no
+   * llegó a Visitado o no hay cómo fecharlo.
+   *
+   * Pipedrive no guarda cuándo un trato pasó por cada etapa, así que se arma
+   * con lo que sí queda en el CRM, en este orden (ver `fechaDeVisita` en
+   * `lib/pipedrive/mapping.ts`):
+   *
+   *  1. La primera **reunión marcada como hecha** sobre el trato.
+   *  2. Si el trato sigue en Visitado: cuándo entró a la etapa
+   *     (`stage_change_time`), o su creación si nació ya visitado (sala).
+   *  3. La última reunión agendada que ya pasó, aunque no la marcaran.
+   *
+   * Un trato que ya pasó a Negociación sin reunión registrada queda en `''`:
+   * su `stage_change_time` es el de la negociación, no el de la visita, y
+   * usarlo correría la visita hacia meses posteriores.
+   *
+   * Puede faltar (`undefined`) en un payload viejo de la caché.
+   */
+  visitDate?: string;
+
+  /**
    * Perfilamiento del trato — los campos del capítulo 07 (Buyer Persona), en
    * el orden de `PERFIL_CAMPOS`.
    *

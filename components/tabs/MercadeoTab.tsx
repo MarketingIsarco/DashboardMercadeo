@@ -7,6 +7,7 @@ import { MixedChart } from '@/components/charts/MixedChart';
 import type { MixedData, MixedOptions } from '@/components/charts/MixedChart';
 import { GRID_COLOR, TICK_COLOR, legendBottom } from '@/components/charts/setup';
 import { pctLabelsBar, pctLabelsDoughnut } from '@/components/charts/pctLabels';
+import { valueLabelsBar } from '@/components/charts/valueLabels';
 import { TasasMercado } from '@/components/TasasMercado';
 import { DataTable } from '@/components/ui/DataTable';
 import { Kpi, KpiGrid } from '@/components/ui/Kpi';
@@ -38,6 +39,7 @@ import {
   SOURCE_FALLBACK,
   STAGES,
   STAGE_SEPARACION,
+  MIN_YEAR,
 } from '@/lib/config/negocio';
 import type { Bolsa, InversionNota } from '@/lib/config/negocio';
 import { fmtCOP, monthLabel, normalize, pct, pctNum, sourceIndices } from '@/lib/format';
@@ -64,9 +66,7 @@ import {
   isVisita,
   keyOf,
   ganadosDelPeriodo,
-  mesGanado,
   timeAxis,
-  timeAxisCon,
 } from '@/lib/selectors';
 import type { FilterState, TabProps } from '@/lib/selectors';
 import type { Lead, LossGroup, Meta } from '@/lib/types';
@@ -78,6 +78,16 @@ import {
   tramosPor,
 } from '@/lib/campanas';
 import type { FilaPauta } from '@/lib/campanas';
+import {
+  DESFASES,
+  DESFASE_COLOR,
+  DESFASE_LABEL,
+  porCohorte,
+  porMesDeVisita,
+  sinFiltroDeTiempo,
+  visitaEnPeriodo,
+  visitasDe,
+} from '@/lib/visitas';
 import { CONTENT_REEL, CONTENT_STATIC, STATUS_LOST, STATUS_OPEN } from '@/lib/types';
 
 // ── Constantes locales ───────────────────────────────────────────────
@@ -103,14 +113,13 @@ export function MercadeoTab({ data, filtered, ganados, filters, meta }: TabProps
       <KpiSection data={data} filtered={filtered} ganados={ganados} filters={filters} meta={meta} goal={goal} />
 
       {/* 02 · Pipeline */}
-      <Section title="02 · Pipeline" sub="Estado del embudo, evolución temporal y comparativo mensual">
+      <Section title="02 · Pipeline" sub="Estado del embudo, evolución temporal y arrastre de visitas entre meses">
         <PipelineVivo leads={filtered} ganados={ganados} />
         <div className="mt-6">
           <Timeline leads={filtered} goal={goal} />
         </div>
         <div className="mt-6">
-          <h3 className="mb-2 text-xs font-semibold text-dim">Comparativo mensual</h3>
-          <Comparativo leads={filtered} ganados={ganados} />
+          <ArrastreVisitas data={data} filtered={filtered} filters={filters} meta={meta} />
         </div>
       </Section>
 
@@ -365,7 +374,7 @@ function PipelineVivo({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
   return (
     <div>
       <h3 className="mb-2 text-xs font-semibold text-dim">Pipeline vivo — total histórico por etapa</h3>
-      <ChartBox height={300}>
+      <ChartBox height={340}>
         <Bar
           data={{
             labels: [...STAGES],
@@ -375,12 +384,14 @@ function PipelineVivo({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
               { label: 'Ganado', data: ganado, backgroundColor: '#12a56b66', borderColor: '#12a56b', borderWidth: 1 },
             ],
           }}
+          plugins={[valueLabelsBar]}
           options={{
-            indexAxis: 'y',
-            plugins: { legend: legendBottom, tooltip: { mode: 'index' } },
+            // Aire arriba para la etiqueta de la barra más alta.
+            layout: { padding: { top: 18 } },
+            plugins: { legend: legendBottom, tooltip: { mode: 'index' }, valueLabels: {} },
             scales: {
-              x: { beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
-              y: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+              x: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+              y: { beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
             },
           }}
         />
@@ -735,40 +746,182 @@ function Outbound({ leads, ganados, labels }: { leads: Lead[]; ganados: Lead[]; 
   );
 }
 
-function Comparativo({ leads, ganados }: { leads: Lead[]; ganados: Lead[] }) {
-  const ta = timeAxisCon(leads, ganados);
-  const buckets = ta.keys.map((kk) => {
-    const rows = leads.filter((l) => keyOf(l) === kk);
-    return {
-      leads: rows.length,
-      citas: rows.filter(isCita).length,
-      vis: rows.filter(isVisita).length,
-      // Por mes de ganado: un cierre de marzo de un lead de octubre es de marzo.
-      gan: ganados.filter((l) => mesGanado(l) === kk).length,
-    };
-  });
+/**
+ * De qué mes son las visitas que ocurren en cada mes.
+ *
+ * El resto del embudo cuenta cada visita en el mes de **registro** del lead.
+ * Aquí el eje es el mes en que la visita **ocurrió**, partido por la antigüedad
+ * del lead. Por eso el periodo de la barra principal se aplica a la fecha de la
+ * visita y el resto de filtros (proyecto, fuente, asesor…) a los leads: si se
+ * filtrara por registro, poner "noviembre" borraría justo las visitas de leads
+ * de octubre que esta gráfica quiere mostrar.
+ *
+ * La tabla de abajo hace la lectura inversa: para cada mes de registro (con el
+ * periodo de la barra aplicado al registro, como en el KPI), qué parte de sus
+ * visitas se pasó a meses siguientes.
+ */
+function ArrastreVisitas({
+  data,
+  filtered,
+  filters,
+  meta,
+}: {
+  data: TabProps['data'];
+  filtered: Lead[];
+  filters: FilterState;
+  meta: Meta;
+}) {
+  const mesActual = useMemo(
+    () => new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 7),
+    [],
+  );
+
+  const porMes = useMemo(() => {
+    const leads = applyFilters(data.leads, sinFiltroDeTiempo(filters), meta.digitalSources);
+    const { visitas, sinFecha } = visitasDe(leads);
+    const enPeriodo = visitas.filter((v) => visitaEnPeriodo(v.fecha, filters) && v.mes.slice(0, 4) >= MIN_YEAR);
+    return { meses: porMesDeVisita(enPeriodo), sinFecha };
+  }, [data.leads, filters, meta.digitalSources]);
+
+  const cohortes = useMemo(() => {
+    const { visitas, sinFecha } = visitasDe(filtered);
+    return { filas: porCohorte(visitas, mesActual), sinFecha };
+  }, [filtered, mesActual]);
+
+  const tot = porMes.meses.reduce(
+    (acc, m) => {
+      acc.total += m.total;
+      DESFASES.forEach((d) => (acc.d[d] += m.porDesfase[d]));
+      return acc;
+    },
+    { total: 0, d: [0, 0, 0] as number[] },
+  );
+  const p = (n: number) => (tot.total ? `${((n / tot.total) * 100).toFixed(1)}%` : '—');
+
+  const totC = cohortes.filas.reduce(
+    (a, c) => ({ total: a.total + c.total, mismo: a.mismo + c.mismo, siguiente: a.siguiente + c.siguiente, despues: a.despues + c.despues }),
+    { total: 0, mismo: 0, siguiente: 0, despues: 0 },
+  );
+  const filasTabla = [
+    ...cohortes.filas.map((c) => ({ ...c, esTotal: false })),
+    ...(cohortes.filas.length > 1
+      ? [{
+          mes: 'TOTAL',
+          ...totC,
+          pctPasan: totC.total ? ((totC.siguiente + totC.despues) / totC.total) * 100 : 0,
+          abierta: false,
+          esTotal: true,
+        }]
+      : []),
+  ];
+  const celda = (v: number, total: number, esTotal: boolean) => {
+    const txt = `${v.toLocaleString('es-CO')}${total ? ` · ${((v / total) * 100).toFixed(0)}%` : ''}`;
+    return esTotal ? <b className="text-text">{txt}</b> : txt;
+  };
 
   return (
-    <ChartBox height={300}>
-      <Bar
-        data={{
-          labels: ta.keys.map(monthLabel),
-          datasets: [
-            { label: 'Leads', data: buckets.map((b) => b.leads), backgroundColor: '#0b5f7e33', borderColor: '#0b5f7e', borderWidth: 2, order: 4 },
-            { label: 'Citas', data: buckets.map((b) => b.citas), backgroundColor: '#18a3c533', borderColor: '#18a3c5', borderWidth: 2, order: 3 },
-            { label: 'Visitas', data: buckets.map((b) => b.vis), backgroundColor: '#12a56b33', borderColor: '#12a56b', borderWidth: 2, order: 2 },
-            { label: 'Sep+Cierres', data: buckets.map((b) => b.gan), backgroundColor: '#ff8a3d33', borderColor: '#ff8a3d', borderWidth: 2, order: 1 },
-          ],
-        }}
-        options={{
-          plugins: { legend: legendBottom, tooltip: { mode: 'index' } },
-          scales: {
-            x: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
-            y: { beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+    <div>
+      <h3 className="mb-1 text-xs font-semibold text-dim">¿De qué mes son las visitas que estamos recibiendo?</h3>
+      <p className="mb-3 text-2xs text-muted">
+        Cada barra es el mes en que la visita <b>ocurrió</b>, partida por el mes en que el lead se <b>registró</b>. El
+        KPI de Visitas cuenta por mes de registro: un cliente de octubre que visita en noviembre suma a octubre. La
+        franja naranja es exactamente ese arrastre.
+      </p>
+
+      <KpiGrid cols={4}>
+        <Kpi size="xs" label="Visitas en el periodo" value={tot.total.toLocaleString('es-CO')} meta="por fecha de visita" />
+        <Kpi size="xs" label="Del mismo mes" value={p(tot.d[0])} meta={`${tot.d[0].toLocaleString('es-CO')} visitas`} />
+        <Kpi size="xs" label="Del mes anterior" value={p(tot.d[1])} meta={`${tot.d[1].toLocaleString('es-CO')} visitas`} />
+        <Kpi size="xs" label="De 2+ meses antes" value={p(tot.d[2])} meta={`${tot.d[2].toLocaleString('es-CO')} visitas`} />
+      </KpiGrid>
+
+      <div className="mt-4">
+        <ChartBox height={340}>
+          <Bar
+            data={{
+              // Segunda línea del rótulo: el % de arrastre del mes, visible sin tooltip.
+              labels: porMes.meses.map((m) => [monthLabel(m.mes), `${m.pctArrastre.toFixed(0)}% arrastre`]) as unknown as string[],
+              datasets: DESFASES.map((d) => ({
+                label: DESFASE_LABEL[d],
+                data: porMes.meses.map((m) => m.porDesfase[d]),
+                backgroundColor: `${DESFASE_COLOR[d]}cc`,
+                borderColor: DESFASE_COLOR[d],
+                borderWidth: 1,
+                stack: 'v',
+                maxBarThickness: 90,
+              })),
+            }}
+            plugins={[valueLabelsBar]}
+            options={{
+              layout: { padding: { top: 20 } },
+              plugins: {
+                legend: legendBottom,
+                tooltip: {
+                  mode: 'index',
+                  callbacks: {
+                    footer: (items) => {
+                      const m = porMes.meses[items[0]?.dataIndex ?? -1];
+                      return m ? `Total ${m.total} · ${m.pctArrastre.toFixed(1)}% de leads de meses anteriores` : '';
+                    },
+                  },
+                },
+                valueLabels: { stacked: true, totales: true },
+              },
+              scales: {
+                x: { stacked: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+                y: { stacked: true, beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } },
+              },
+            }}
+          />
+        </ChartBox>
+      </div>
+
+      <h3 className="mb-1 mt-6 text-xs font-semibold text-dim">Por mes de registro: qué parte de las visitas se pasa al mes siguiente</h3>
+      <p className="mb-2 text-2xs text-muted">
+        Cada fila es un grupo de leads según su mes de registro (respeta el periodo de la barra principal, igual que el
+        KPI). Los grupos marcados <i>en curso</i> todavía pueden sumar visitas en los próximos meses, así que su % de
+        arrastre va a subir.
+      </p>
+      <DataTable
+        rows={filasTabla}
+        columns={[
+          {
+            header: 'Mes de registro',
+            cell: (r) =>
+              r.esTotal ? (
+                <b className="uppercase tracking-wide text-accent">Total</b>
+              ) : (
+                <span>
+                  <b>{monthLabel(r.mes)}</b>
+                  {r.abierta ? <span className="ml-1 text-2xs text-muted">(en curso)</span> : null}
+                </span>
+              ),
           },
-        }}
+          { header: 'Visitas', cell: (r) => celda(r.total, 0, r.esTotal), align: 'right' },
+          { header: 'En su mismo mes', cell: (r) => celda(r.mismo, r.total, r.esTotal), align: 'right' },
+          { header: 'Al mes siguiente', cell: (r) => celda(r.siguiente, r.total, r.esTotal), align: 'right' },
+          { header: '2+ meses después', cell: (r) => celda(r.despues, r.total, r.esTotal), align: 'right' },
+          {
+            header: '% que se pasa',
+            cell: (r) => <b style={{ color: DESFASE_COLOR[1] }}>{r.total ? `${r.pctPasan.toFixed(1)}%` : '—'}</b>,
+            align: 'right',
+          },
+        ]}
       />
-    </ChartBox>
+      {cohortes.sinFecha > 0 ? (
+        <p className="mt-2 text-2xs text-muted">
+          {cohortes.sinFecha === 1
+            ? '1 visita del periodo no tiene fecha confiable'
+            : `${cohortes.sinFecha.toLocaleString('es-CO')} visitas del periodo no tienen fecha confiable`}
+          : son tratos que pasaron de Visitado sin una reunión registrada en el CRM. Cuentan en el KPI pero no se pueden
+          ubicar en el mes en que visitaron.
+        </p>
+      ) : null}
+      <p className="mt-1 text-2xs text-muted">
+        Fecha de visita: la primera reunión marcada como hecha; si no hay y el trato sigue en Visitado, el día en que
+        entró a esa etapa (o su creación, si nació visitado en sala).
+      </p>
+    </div>
   );
 }
 
